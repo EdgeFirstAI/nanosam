@@ -217,7 +217,12 @@ def main():
             copy_onnx_input_output_names_to_tflite=True,
             replace_to_pseudo_operators=["erf"],
             non_verbose=True,
-            quant_calib_input_op_name_np_data_path=[["image", calib_npy]],
+            output_integer_quantized_tflite=True,
+            # Format: [[input_name, npy_path, [mean], [std]]]
+            # Data is already preprocessed, so use identity normalization
+            custom_input_op_name_np_data_path=[
+                ["image", calib_npy, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
+            ],
         )
         tflite_files = glob.glob(os.path.join(args.output_dir, "*.tflite"))
         print(f"INT8 TFLite saved to {args.output_dir}/")
