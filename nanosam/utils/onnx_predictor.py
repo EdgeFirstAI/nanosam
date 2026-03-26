@@ -14,6 +14,7 @@ class OnnxPredictor:
         mask_decoder_path: str,
         image_encoder_size: int = 1024,
         decoder_coord_size: int = 1024,
+        normalize_input: bool = True,
     ):
         providers = ["CPUExecutionProvider"]
         self.encoder_session = ort.InferenceSession(image_encoder_path, providers=providers)
@@ -23,6 +24,8 @@ class OnnxPredictor:
         # decoder's training coordinate space (1024 for standard SAM decoders).
         # This may differ from the image encoder's input resolution.
         self.decoder_coord_size = decoder_coord_size
+        # Set to False for "nonorm" encoders (e.g. PPHGV2) that expect raw [0,255]
+        self.normalize_input = normalize_input
         self.image = None
         self.features = None
 
@@ -31,7 +34,9 @@ class OnnxPredictor:
         if isinstance(image, np.ndarray):
             image = PIL.Image.fromarray(image)
         self.image = image
-        image_tensor = preprocess_image(image, size=self.image_encoder_size)
+        image_tensor = preprocess_image(
+            image, size=self.image_encoder_size, normalize=self.normalize_input
+        )
         outputs = self.encoder_session.run(None, {"image": image_tensor})
         self.features = outputs[0]  # shape: (1, 256, 64, 64)
 

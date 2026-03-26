@@ -42,6 +42,8 @@ def main():
     parser.add_argument("--encoder_size", type=int, default=1024)
     parser.add_argument("--decoder_coord_size", type=int, default=1024,
                         help="Coordinate space the mask decoder expects (1024 for standard SAM decoders).")
+    parser.add_argument("--no-normalize", action="store_true",
+                        help="Skip ImageNet normalization (for 'nonorm' encoders like PPHGV2)")
     parser.add_argument("--output", type=str, default="data/nanosam_onnx_coco_results.json")
     args = parser.parse_args()
 
@@ -52,6 +54,7 @@ def main():
         mask_decoder_path=args.mask_decoder,
         image_encoder_size=args.encoder_size,
         decoder_coord_size=args.decoder_coord_size,
+        normalize_input=not args.no_normalize,
     )
 
     results = []

@@ -7,11 +7,17 @@ IMAGE_MEAN = np.array([123.675, 116.28, 103.53], dtype=np.float32).reshape(3, 1,
 IMAGE_STD = np.array([58.395, 57.12, 57.375], dtype=np.float32).reshape(3, 1, 1)
 
 
-def preprocess_image(image, size: int = 1024) -> np.ndarray:
+def preprocess_image(image, size: int = 1024, normalize: bool = True) -> np.ndarray:
     """Preprocess an image for the NanoSAM encoder.
 
-    Aspect-ratio-preserving resize, ImageNet normalization, zero-padding to size x size.
+    Aspect-ratio-preserving resize, optional ImageNet normalization, zero-padding.
     Returns NCHW float32 numpy array with batch dim.
+
+    Args:
+        image: PIL Image or numpy array.
+        size: Target encoder input size.
+        normalize: If True, apply ImageNet normalization. Set to False for "nonorm"
+            encoders (e.g. PPHGV2) that expect raw [0, 255] pixel values.
     """
     if isinstance(image, np.ndarray):
         image = PIL.Image.fromarray(image)
@@ -30,12 +36,13 @@ def preprocess_image(image, size: int = 1024) -> np.ndarray:
     # HWC -> CHW
     image_chw = np.transpose(image_np, (2, 0, 1))
 
-    # Normalize
-    image_normalized = (image_chw - IMAGE_MEAN) / IMAGE_STD
+    # Normalize (skip for "nonorm" encoders that expect raw [0, 255])
+    if normalize:
+        image_chw = (image_chw - IMAGE_MEAN) / IMAGE_STD
 
     # Pad to size x size
     image_tensor = np.zeros((1, 3, size, size), dtype=np.float32)
-    image_tensor[0, :, :resize_height, :resize_width] = image_normalized
+    image_tensor[0, :, :resize_height, :resize_width] = image_chw
 
     return image_tensor
 

@@ -15,9 +15,15 @@ def main():
     parser.add_argument("--image", type=str, default="assets/dogs.jpg")
     parser.add_argument("--output", type=str, default="data/basic_usage_onnx_out.jpg")
     parser.add_argument("--encoder_size", type=int, default=1024)
+    parser.add_argument("--no-normalize", action="store_true",
+                        help="Skip ImageNet normalization (for 'nonorm' encoders like PPHGV2)")
     args = parser.parse_args()
 
-    predictor = OnnxPredictor(args.image_encoder, args.mask_decoder, image_encoder_size=args.encoder_size)
+    predictor = OnnxPredictor(
+        args.image_encoder, args.mask_decoder,
+        image_encoder_size=args.encoder_size,
+        normalize_input=not args.no_normalize,
+    )
 
     image = PIL.Image.open(args.image)
     predictor.set_image(image)
