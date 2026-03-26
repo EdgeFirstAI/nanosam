@@ -13,11 +13,16 @@ class OnnxPredictor:
         image_encoder_path: str,
         mask_decoder_path: str,
         image_encoder_size: int = 1024,
+        decoder_coord_size: int = 1024,
     ):
         providers = ["CPUExecutionProvider"]
         self.encoder_session = ort.InferenceSession(image_encoder_path, providers=providers)
         self.decoder_session = ort.InferenceSession(mask_decoder_path, providers=providers)
         self.image_encoder_size = image_encoder_size
+        # The SAM mask decoder always expects point coordinates scaled to the
+        # decoder's training coordinate space (1024 for standard SAM decoders).
+        # This may differ from the image encoder's input resolution.
+        self.decoder_coord_size = decoder_coord_size
         self.image = None
         self.features = None
 
@@ -40,7 +45,7 @@ class OnnxPredictor:
         scaled_points = preprocess_points(
             points,
             image_size=(self.image.height, self.image.width),
-            size=self.image_encoder_size,
+            size=self.decoder_coord_size,
         )
 
         # Prepare decoder inputs as float32 numpy arrays

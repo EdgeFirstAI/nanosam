@@ -56,6 +56,9 @@ if __name__ == "__main__":
     if args.category_id is not None:
         results = filter_results_by_category_id(results, args.category_id)
 
+    if not results:
+        print("No results after filtering.")
+        import sys; sys.exit(0)
     miou = sum(r['iou'] for r in results) / len(results)
 
     print(f"mIOU: {miou}")
