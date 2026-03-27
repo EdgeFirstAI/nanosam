@@ -1,430 +1,164 @@
-<h1 align="center"><span>NanoSAM</span></h1>
+# NanoSAM — EdgeFirstAI Edge Platform Fork
 
-<p align="center"><a href="#usage"/>👍 Usage</a> - <a href="#performance"/>⏱️ Performance</a> - <a href="#setup">🛠️ Setup</a> - <a href="#examples">🤸 Examples</a> - <a href="#training">🏋️ Training</a> <br>- <a href="#evaluation">🧐 Evaluation</a> - <a href="#acknowledgement">👏 Acknowledgment</a> - <a href="#see-also">🔗 See also</a></p>
+> **This is the [EdgeFirstAI](https://edgefirst.ai) fork of [NVIDIA-AI-IOT/nanosam](https://github.com/NVIDIA-AI-IOT/nanosam).**
+> Focus: porting NanoSAM to run on edge hardware beyond Jetson — NXP i.MX platforms,
+> Raspberry Pi 5 with Hailo-8L, and discrete NPU accelerators.
+>
+> **Work in progress.** Complete LVIS validation and end-to-end optimized benchmarks will be
+> published on [EdgeFirst Models](https://huggingface.co/spaces/EdgeFirst/Models) once available.
 
-NanoSAM is a [Segment Anything (SAM)](https://github.com/facebookresearch/segment-anything) model variant that is capable of running in 🔥 ***real-time*** 🔥 on [NVIDIA Jetson Orin Platforms](https://store.nvidia.com/en-us/jetson/store) with [NVIDIA TensorRT](https://developer.nvidia.com/tensorrt).  
+---
 
-<!-- <img src="assets/tshirt_gif_compressed_v2.gif" height="20%" width="20%"/>   -->
-<p align="center"><img src="assets/basic_usage_out.jpg" height="256px"/></p>
-<!--<img src="assets/mouse_gif_compressed.gif"  height="50%" width="50%"/> -->
+## Platform Support
 
-> NanoSAM is trained by distilling the [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) image encoder
-> on unlabeled images.  For an introduction to knowledge distillation, we recommend checking out [this tutorial](https://github.com/NVIDIA-AI-IOT/jetson-intro-to-distillation).
+The ResNet18 encoder is a pure CNN — it compiles and runs on every tested NPU.
+The MobileSAM decoder contains attention layers and runs on CPU (ONNX) on all platforms.
 
-<a id="usage"></a>
-## 👍 Usage
+| Platform | NPU / Accelerator | Encoder Format | Decoder Format |
+|----------|-------------------|----------------|----------------|
+| Jetson Orin Nano Super | NVIDIA GPU | TensorRT FP16 | TensorRT FP32 |
+| Raspberry Pi 5 + Hailo-8L HAT | Hailo-8L NPU | HEF INT8 | ONNX CPU FP32 |
+| NXP i.MX 95 | Neutron NPU | TFLite INT8 | ONNX CPU FP32 |
+| NXP i.MX 95 + Ara240 (M.2 PCIe) | Kinara Ara-2 NPU | DVM INT8 | ONNX CPU FP32 |
+| NXP i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 | ONNX CPU FP32 |
 
-Using NanoSAM from Python looks like this
+---
 
-```python3
-from nanosam.utils.predictor import Predictor
+## Benchmark Results
 
-predictor = Predictor(
-    image_encoder="data/resnet18_image_encoder.engine",
-    mask_decoder="data/mobile_sam_mask_decoder.engine"
-)
+> Results validate that each platform reproduces the **ONNX FP32 reference output** (Mask IoU vs ONNX).
+> These use ImageNet-pretrained ResNet18 backbone weights with an untrained distillation neck —
+> NVIDIA's distilled weights are inaccessible (private). When distilled weights are available,
+> actual segmentation accuracy can be measured with the same exported models.
 
-image = PIL.Image.open("dog.jpg")
+### Encoder + Decoder (ResNet18, initial measurements)
 
-predictor.set_image(image)
+| Platform | Accelerator | Format | Encoder (ms) | Mask IoU vs ONNX | Decoder CPU (ms) | Total (ms) |
+|----------|-------------|--------|:------------:|:----------------:|:----------------:|:----------:|
+| x86_64 | ONNX Runtime | ONNX FP32 (61 MB) | ~200 | baseline | 15.8 | ~216 |
+| Jetson Orin Nano Super | NVIDIA GPU | TRT FP16 (33 MB) | 12.8 | 0.9999 | 63.3 | ~76 |
+| Hailo-8L (RPi5) | Hailo-8L NPU | HEF INT8 (36 MB) | 46 | 0.9654 | 125 | ~171 |
+| i.MX 95 + Ara240 | Kinara Ara-2 NPU | DVM INT8 (27 MB) | 45.3 | 0.9961 | 430 | ~475 |
+| i.MX 95 | Neutron NPU | TFLite INT8 (16 MB) | 178 | 0.9784 | 430 | ~608 |
+| i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 (15 MB) | 335 | 0.9972 | 421 | ~756 |
 
-mask, _, _ = predictor.predict(np.array([[x, y]]), np.array([1]))
-```
+---
 
-<details>
-<summary>Notes</summary>
-The point labels may be
+## Getting Started
 
-| Point Label | Description |
-|:--------------------:|-------------|
-| 0 | Background point |
-| 1 | Foreground point |
-| 2 | Bounding box top-left |
-| 3 | Bounding box bottom-right |
-</details>
-
-> Follow the instructions below for how to build the engine files.
-
-<a id="performance"></a>
-## ⏱️ Performance
-
-NanoSAM runs real-time on Jetson Orin Nano.
-
-<table style="border-top: solid 1px; border-left: solid 1px; border-right: solid 1px; border-bottom: solid 1px">
-    <thead>
-        <tr>
-            <th rowspan=2 style="text-align: center; border-right: solid 1px">Model †</th>
-            <th colspan=2 style="text-align: center; border-right: solid 1px">:stopwatch: Jetson Orin Nano (ms)</th>
-            <th colspan=2 style="text-align: center; border-right: solid 1px">:stopwatch: Jetson AGX Orin (ms)</th>
-            <th colspan=4 style="text-align: center; border-right: solid 1px"> :dart: Accuracy (mIoU) ‡</th>
-        </tr>
-        <tr>
-            <th style="text-align: center; border-right: solid 1px">Image Encoder</th>
-            <th style="text-align: center; border-right: solid 1px">Full Pipeline</th>
-            <th style="text-align: center; border-right: solid 1px">Image Encoder</th>
-            <th style="text-align: center; border-right: solid 1px">Full Pipeline</th>
-            <th style="text-align: center; border-right: solid 1px">All</th>
-            <th style="text-align: center; border-right: solid 1px">Small</th>
-            <th style="text-align: center; border-right: solid 1px">Medium</th>
-            <th style="text-align: center; border-right: solid 1px">Large</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td style="text-align: center; border-right: solid 1px">MobileSAM</td>
-            <td style="text-align: center; border-right: solid 1px">TBD</td>
-            <td style="text-align: center; border-right: solid 1px">146</td>
-            <td style="text-align: center; border-right: solid 1px">35</td>
-            <td style="text-align: center; border-right: solid 1px">39</td>
-            <td style="text-align: center; border-right: solid 1px">0.728</td>
-            <td style="text-align: center; border-right: solid 1px">0.658</td>
-            <td style="text-align: center; border-right: solid 1px">0.759</td>
-            <td style="text-align: center; border-right: solid 1px">0.804</td>
-        </tr>
-        <tr>
-            <td style="text-align: center; border-right: solid 1px">NanoSAM (ResNet18)</td>
-            <td style="text-align: center; border-right: solid 1px">TBD</td>
-            <td style="text-align: center; border-right: solid 1px">27</td>
-            <td style="text-align: center; border-right: solid 1px">4.2</td>
-            <td style="text-align: center; border-right: solid 1px">8.1</td>
-            <td style="text-align: center; border-right: solid 1px">0.706</td>
-            <td style="text-align: center; border-right: solid 1px">0.624</td>
-            <td style="text-align: center; border-right: solid 1px">0.738</td>
-            <td style="text-align: center; border-right: solid 1px">0.796</td>
-        </tr>
-    </tbody>
-</table>
-
-<details>
-<summary>Notes</summary>
-
-† The MobileSAM image encoder is optimized with FP32 precision because it produced erroneous results when built for FP16 precision with TensorRT.  The NanoSAM image encoder
-is built with FP16 precision as we did not notice a significant accuracy degredation.  Both pipelines use the same mask decoder which is built with FP32 precision.  For all models, the accuracy reported uses the same model configuration used to measure latency.
-
-‡ Accuracy is computed by prompting SAM with ground-truth object bounding box annotations from the COCO 2017 validation dataset.  The IoU is then computed between the mask output of the SAM model for the object and the ground-truth COCO segmentation mask for the object.  The mIoU is the average IoU over all objects in the COCO 2017 validation set matching the target object size (small, medium, large).  
-
-</details>
-
-<a id="setup"></a>
-## 🛠️ Setup
-
-NanoSAM is fairly easy to get started with.
-
-1. Install the dependencies
-
-    1. Install PyTorch
-
-    2. Install [torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt)
-    3. Install NVIDIA TensorRT
-    4. (optional) Install [TRTPose](https://github.com/NVIDIA-AI-IOT/trt_pose) - For the pose example.
-        
-        ```bash
-        git clone https://github.com/NVIDIA-AI-IOT/trt_pose
-        cd trt_pose
-        python3 setup.py develop --user
-        ```
-
-    5. (optional) Install the Transformers library - For the OWL ViT example.
-
-        ```bash
-        python3 -m pip install transformers
-        ```
-
-2. Install the NanoSAM Python package
-    
-    ```bash
-    git clone https://github.com/NVIDIA-AI-IOT/nanosam
-    cd nanosam
-    python3 setup.py develop --user
-    ```
-
-3. Build the TensorRT engine for the mask decoder
-
-    1. Export the MobileSAM mask decoder ONNX file (or download directly from [here](https://drive.google.com/file/d/1jYNvnseTL49SNRx9PDcbkZ9DwsY8up7n/view?usp=drive_link))
-    
-        ```bash
-        python3 -m nanosam.tools.export_sam_mask_decoder_onnx \
-            --model-type=vit_t \
-            --checkpoint=assets/mobile_sam.pt \
-            --output=data/mobile_sam_mask_decoder.onnx
-        ```
-
-    2. Build the TensorRT engine
-
-        ```bash
-        trtexec \
-            --onnx=data/mobile_sam_mask_decoder.onnx \
-            --saveEngine=data/mobile_sam_mask_decoder.engine \
-            --minShapes=point_coords:1x1x2,point_labels:1x1 \
-            --optShapes=point_coords:1x1x2,point_labels:1x1 \
-            --maxShapes=point_coords:1x10x2,point_labels:1x10
-        ```
-
-        > This assumes the mask decoder ONNX file is downloaded to ``data/mobile_sam_mask_decoder.onnx``
-
-        <details>
-        <summary>Notes</summary>
-        This command builds the engine to support up to 10 keypoints.  You can increase
-        this limit as needed by specifying a different max shape.
-        </details>
-
-4. Build the TensorRT engine for the NanoSAM image encoder
-
-    1. Download the image encoder: [resnet18_image_encoder.onnx](https://drive.google.com/file/d/14-SsvoaTl-esC3JOzomHDnI9OGgdO2OR/view?usp=drive_link)
-    
-    2. Build the TensorRT engine
-
-        ```bash
-        trtexec \
-            --onnx=data/resnet18_image_encoder.onnx \
-            --saveEngine=data/resnet18_image_encoder.engine \
-            --fp16
-        ```
-
-5. Run the basic usage example
-
-    ```
-    python3 examples/basic_usage.py \
-        --image_encoder=data/resnet18_image_encoder.engine \
-        --mask_decoder=data/mobile_sam_mask_decoder.engine
-    ```
-
-    > This outputs a result to ``data/basic_usage_out.jpg``
-
-
-That's it!  From there, you can read the example code for examples on how
-to use NanoSAM with Python.  Or try running the more advanced examples below.
-
-<a id="examples"></a>
-## 🤸 Examples
-
-NanoSAM can be applied in many creative ways.
-
-### Example 1 - Segment with bounding box
-
-<img src="assets/basic_usage_out.jpg" height="256"/>
-
-This example uses a known image with a fixed bounding box to control NanoSAM
-segmentation.  
-
-To run the example, call
-
-```python3
-python3 examples/basic_usage.py \
-    --image_encoder="data/resnet18_image_encoder.engine" \
-    --mask_decoder="data/mobile_sam_mask_decoder.engine"
-```
-
-### Example 2 - Segment with bounding box (using OWL-ViT detections)
-
-<img src="assets/owl_out.png"  height="256"/>
-
-This example demonstrates using OWL-ViT to detect objects using a text prompt(s),
-and then segmenting these objects using NanoSAM.
-
-To run the example, call
+### ONNX Runtime (CPU, any platform)
 
 ```bash
-python3 examples/segment_from_owl.py \
-    --prompt="A tree" \
-    --image_encoder="data/resnet18_image_encoder.engine" \
-    --mask_decoder="data/mobile_sam_mask_decoder.engine
+git clone https://github.com/au-zone/nanosam -b edgefirst
+cd nanosam
+python3 -m venv venv && source venv/bin/activate
+pip install -e ".[onnx]"
+
+python3 scripts/basic_usage.py \
+    --image_encoder data/resnet18_image_encoder_legacy.onnx \
+    --mask_decoder  data/mobile_sam_mask_decoder.onnx
 ```
 
-<details>
-<summary>Notes</summary>
-- While OWL-ViT does not run real-time on Jetson Orin Nano (3sec/img), it is nice for experimentation
-as it allows you to detect a wide variety of objects.  You could substitute any
-other real-time pre-trained object detector to take full advantage of NanoSAM's 
-speed.
-</details>
+### Raspberry Pi 5 + Hailo-8L
 
-### Example 3 - Segment with keypoints (offline using TRTPose detections)
-
-<img src="assets/pose_out.png"  height="256"/>
-
-This example demonstrates how to use human pose keypoints from [TRTPose](https://github.com/NVIDIA-AI-IOT/trt_pose) to control NanoSAM segmentation.
-
-To run the example, call
+Requires the `hailo-all` system package (provides `hailo_platform` Python bindings).
 
 ```bash
-python3 examples/segment_from_pose.py
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install onnxruntime pillow matplotlib numpy
+
+python3 scripts/rpi5_hailo_inference.py \
+    --encoder data/resnet18_encoder_h8l.hef \
+    --decoder data/mobile_sam_mask_decoder.onnx \
+    --image   assets/dogs.jpg \
+    --output  out.jpg
 ```
 
-This will save an output figure to ``data/segment_from_pose_out.png``.
+### Compile Hailo-8L HEF from ONNX
 
-### Example 4 - Segment with keypoints (online using TRTPose detections)
+Requires [Hailo DFC 3.33.1](https://hailo.ai/developer-zone/) and COCO val2017 images.
 
-<img src="assets/tshirt_gif_compressed_v2.gif"  height="40%" width="40%"/>
+```bash
+source ~/path/to/hailo_model_zoo/venv/bin/activate
 
-This example demonstrates how to use human pose to control segmentation on
-a live camera feed.  This example requires an attached display and camera.
-
-To run the example, call
-
-```python3
-python3 examples/demo_pose_tshirt.py
+python3 nanosam/tools/compile_encoder_hailo.py \
+    --onnx  data/resnet18_image_encoder_legacy.onnx \
+    --coco  data/coco/val2017 \
+    --output data/
 ```
 
-### Example 5 - Segment and track (experimental)
+---
 
-<img src="assets/mouse_gif_compressed.gif"  height="40%" width="40%"/>
+## Distillation Training
 
-This example demonstrates a rudimentary segmentation tracking with NanoSAM.
-This example requires an attached display and camera.
+Train a new encoder without TensorRT. Pre-extract teacher features once, then train anywhere.
 
-To run the example, call
+**Step 1 — Extract teacher features** (GPU machine, run once)
 
-```python3
-python3 examples/demo_click_segment_track.py <image_encoder_engine> <mask_decoder_engine>
+```bash
+python3 scripts/extract_sam_features.py \
+    --checkpoint assets/mobile_sam.pt \
+    --model_type  vit_t \
+    --img_dir     data/coco/train2017 \
+    --out_dir     data/coco/features_vit_t
 ```
 
-Once the example is running **double click** an object you want to track.
+**Step 2 — Train student encoder**
 
-<details>
-<summary>Notes</summary>
-This tracking method is very simple and can get lost easily.  It is intended to
-demonstrate creative ways you can use NanoSAM, but would likely be improved with
-more work.
-</details>
+```bash
+python3 -m nanosam.tools.train \
+    --images      data/coco/train2017 \
+    --features    data/coco/features_vit_t \
+    --output_dir  runs/resnet18_distill \
+    --model_name  resnet18 \
+    --batch_size  16
+```
 
-<a id="training"></a>
-## 🏋️ Training
+Available student models: `resnet18`, `efficientvit_b0_sam`, `efficientvit_b1_sam`, `efficientvit_b2_sam`.
 
-You can train NanoSAM on a single GPU
+**Step 3 — Export to ONNX**
 
-1. Download and extract the COCO 2017 train images
+```bash
+python3 -m nanosam.tools.export_image_encoder_onnx \
+    --model_name resnet18 \
+    --checkpoint runs/resnet18_distill/checkpoint.pth \
+    --output     data/resnet18_image_encoder.onnx
+```
 
-    ```bash
-    # mkdir -p data/coco  # uncomment if it doesn't exist
-    mkdir -p data/coco
-    cd data/coco
-    wget http://images.cocodataset.org/zips/train2017.zip
-    unzip train2017.zip
-    cd ../..
-    ```
+---
 
-2. Build the MobileSAM image encoder (used as teacher model)
+## Evaluation
 
-    1. Export to ONNX
+Evaluate with ONNX Runtime (no GPU required):
 
-        ```bash
-        python3 -m nanosam.tools.export_sam_image_encoder_onnx \
-            --checkpoint="assets/mobile_sam.pt" \
-            --output="data/mobile_sam_image_encoder_bs16.onnx" \
-            --model_type=vit_t \
-            --batch_size=16
-        ```
+```bash
+python3 -m nanosam.tools.eval_coco_onnx \
+    --coco_root data/coco/val2017 \
+    --coco_ann  data/coco/annotations/instances_val2017.json \
+    --encoder   data/resnet18_image_encoder_legacy.onnx \
+    --decoder   data/mobile_sam_mask_decoder.onnx \
+    --output    data/resnet18_coco_results.json
 
-    2. Build the TensorRT engine with batch size 16
+python3 -m nanosam.tools.compute_eval_coco_metrics \
+    data/resnet18_coco_results.json --size all
+```
 
-        ```bash
-        trtexec \
-            --onnx=data/mobile_sam_image_encoder_bs16.onnx \
-            --shapes=image:16x3x1024x1024 \
-            --saveEngine=data/mobile_sam_image_encoder_bs16.engine
-        ```
+---
 
-3. Train the NanoSAM image encoder by distilling MobileSAM
+## Known Limitations
 
-    ```bash
-    python3 -m nanosam.tools.train \
-        --images=data/coco/train2017 \
-        --output_dir=data/models/resnet18 \
-        --model_name=resnet18 \
-        --teacher_image_encoder_engine=data/mobile_sam_image_encoder_bs16.engine \
-        --batch_size=16
-    ```
+- **Decoder not convertible to TFLite or DVM** — the TwoWayTransformer uses 5D attention tensors that block NHWC transposition. Decoder runs ONNX on CPU on all NPU platforms.
+- **Ara240 requires graph surgery** — ConvTranspose with `output_padding=[1,1]` crashes the Kinara scheduler. Workaround replaces it with Resize(nearest)+Conv and substitutes tanh for GELU.
+- **NVIDIA distilled ResNet18 weights** — the original Google Drive link is private. Using ImageNet backbone weights for conversion/deployment validation.
+- **TFLite full INT8 decoder fails on CPU** — Div op in GELU polynomial lacks an INT8 kernel. Works on i.MX NPU targets only.
 
-    <details>
-    <summary>Notes</summary>
-    Once training, visualizations of progress and checkpoints will be saved to
-    the specified output directory.  You can stop training and resume from the last
-    saved checkpoint if needed.
+---
 
-    For a list of arguments, you can type 
+## Acknowledgements
 
-    ```bash
-    python3 -m nanosam.tools.train --help
-    ```
-    </details>
-
-4. Export the trained NanoSAM image encoder to ONNX
-
-    ```bash
-    python3 -m nanosam.tools.export_image_encoder_onnx \
-        --model_name=resnet18 \
-        --checkpoint="data/models/resnet18/checkpoint.pth" \
-        --output="data/resnet18_image_encoder.onnx"
-    ```
-
-You can then build the TensorRT engine as detailed in the getting started section.
-
-<a id="evaluation"></a>
-## 🧐 Evaluation
-
-You can reproduce the accuracy results above by evaluating against COCO ground
-truth masks
-
-
-1. Download and extract the COCO 2017 validation set.
-
-    ```bash
-    # mkdir -p data/coco  # uncomment if it doesn't exist
-    cd data/coco
-    wget http://images.cocodataset.org/zips/val2017.zip
-    wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
-    unzip val2017.zip
-    unzip annotations_trainval2017.zip
-    cd ../..
-    ```
-
-2. Compute the IoU of NanoSAM mask predictions against the ground truth COCO mask annotation.
-
-    ```bash
-    python3 -m nanosam.tools.eval_coco \
-        --coco_root=data/coco/val2017 \
-        --coco_ann=data/coco/annotations/instances_val2017.json \
-        --image_encoder=data/resnet18_image_encoder.engine \
-        --mask_decoder=data/mobile_sam_mask_decoder.engine \
-        --output=data/resnet18_coco_results.json
-    ```
-
-    > This uses the COCO ground-truth bounding boxes as inputs to NanoSAM
-
-3. Compute the average IoU over a selected category or size
-
-    ```bash
-    python3 -m nanosam.tools.compute_eval_coco_metrics \
-        data/efficientvit_b0_coco_results.json \
-        --size="all"
-    ```
-
-    <details>
-    <summary>Notes</summary>
-    For all options type ``python3 -m nanosam.tools.compute_eval_coco_metrics --help``.
-
-    To compute the mIoU for a specific category id.
-
-    ```bash
-    python3 -m nanosam.tools.compute_eval_coco_metrics \
-        data/resnet18_coco_results.json \
-        --category_id=1
-    ```
-    </details>
-
-
-<a id="acknowledgement"></a>
-## 👏 Acknowledgement
-
-This project is enabled by the great projects below.
-
-- [SAM](https://github.com/facebookresearch/segment-anything) - The original Segment Anything model.
-- [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) - The distilled Tiny ViT Segment Anything model.
-
-<a id="see-also"></a>
-## 🔗 See also
-
-- [Jetson Introduction to Knowledge Distillation Tutorial](https://github.com/NVIDIA-AI-IOT/jetson-intro-to-distillation) - For an introduction to knowledge distillation as a model optimization technique.
-- [Jetson Generative AI Playground](https://nvidia-ai-iot.github.io/jetson-generative-ai-playground/) - For instructions and tips for using a variety of LLMs and transformers on Jetson.
-- [Jetson Containers](https://github.com/dusty-nv/jetson-containers) - For a variety of easily deployable and modular Jetson Containers
+- [NVIDIA-AI-IOT/nanosam](https://github.com/NVIDIA-AI-IOT/nanosam) — original NanoSAM
+- [binh234/nanosam](https://github.com/binh234/nanosam) — EfficientViT encoders, ONNX Runtime support, SA-1B tooling (selectively integrated)
+- [dragonSwing/nanosam](https://huggingface.co/dragonSwing/nanosam) — PPHGV2-B4 distilled encoder weights
+- [SAM](https://github.com/facebookresearch/segment-anything) — Segment Anything Model (Meta AI)
+- [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) — distilled TinyViT SAM encoder
