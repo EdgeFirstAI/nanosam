@@ -1,0 +1,7 @@
+# NanoSAM ResNet18 encoder model script for Hailo-8L
+#
+# Folds ImageNet normalization into quantization — at runtime feed raw [0, 255] float32 images.
+# No change_output_activation needed (encoder output is plain feature maps, no sigmoid).
+
+normalization1 = normalization([123.675, 116.28, 103.53], [58.395, 57.12, 57.375])
+performance_param(compiler_optimization_level=max)
