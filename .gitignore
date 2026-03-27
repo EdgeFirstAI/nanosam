@@ -7,3 +7,11 @@ data
 **.egg-info
 *.onnx
 .hypothesis
+
+# Local log files
+*.log
+hailo_sdk.*.log
+
+# Local planning/design docs (not for git)
+docs/superpowers/
+.claude/plans/
