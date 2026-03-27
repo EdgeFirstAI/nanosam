@@ -1,0 +1,7 @@
+path: data/sam_hgv2_b4_ln_nonorm_image_encoder.engine
+name: TrtModel
+input_names:
+  - image
+output_names:
+  - image_embeddings
+normalize_input: False

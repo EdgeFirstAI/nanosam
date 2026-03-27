@@ -1,0 +1,17 @@
+Obtaining file:///home/sebastien/Software/SAM/nanosam
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: nanosam
+  Building editable for nanosam (pyproject.toml): started
+  Building editable for nanosam (pyproject.toml): finished with status 'done'
+  Created wheel for nanosam: filename=nanosam-0.0-0.editable-py3-none-any.whl size=6741 sha256=9a97cbc3f4165e9b12a93c84613f832c535b9c29022048c393d4a79f24733c69
+  Stored in directory: /tmp/pip-ephem-wheel-cache-nhr3gzb0/wheels/fb/44/52/097070c8a59c79ad5543c2a71405516aee0af2904415e0eea3
+Successfully built nanosam
+Installing collected packages: nanosam
+Successfully installed nanosam-0.0

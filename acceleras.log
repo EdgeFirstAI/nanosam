@@ -1,0 +1,2 @@
+2026-03-26 13:14:16,124 - INFO - conv_stripped_op.py:633 - No shifts available for layer resnet18_encoder/conv22/conv_op, using max shift instead. delta=0.3460
+2026-03-26 13:14:16,164 - INFO - conv_stripped_op.py:633 - No shifts available for layer resnet18_encoder/conv22/conv_op, using max shift instead. delta=0.1730

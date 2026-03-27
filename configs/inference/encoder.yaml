@@ -1,0 +1,3 @@
+path: data/sam_hgv2_b4_ln_nonorm_image_encoder.onnx
+provider: cpu
+normalize_input: False

@@ -1,0 +1,11 @@
+path: data/efficientvit_l0_mask_decoder.engine
+name: TrtModel
+input_names: 
+  - image_embeddings
+  - point_coords
+  - point_labels
+  - mask_input
+  - has_mask_input
+output_names:
+  - iou_predictions
+  - low_res_masks

@@ -1,0 +1,32 @@
+2026-03-26 13:13:38,846 - INFO - parser.py:158 - Translation started on ONNX model resnet18_encoder
+2026-03-26 13:13:39,003 - INFO - parser.py:193 - Restored ONNX model resnet18_encoder (completion time: 00:00:00.16)
+2026-03-26 13:13:39,587 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:00.74)
+2026-03-26 13:13:40,124 - INFO - parser.py:366 - Start nodes mapped from original model: 'image': 'resnet18_encoder/input_layer1'.
+2026-03-26 13:13:40,124 - INFO - parser.py:367 - End nodes mapped from original model: '/Add'.
+2026-03-26 13:13:40,140 - INFO - parser.py:288 - Translation completed on ONNX model resnet18_encoder (completion time: 00:00:01.29)
+2026-03-26 13:13:40,370 - INFO - client_runner.py:501 - Loading model script commands to resnet18_encoder from /home/sebastien/Software/SAM/nanosam/nanosam/tools/resnet18_encoder.alls
+2026-03-26 13:13:40,374 - INFO - commands.py:4270 - ParsedPerformanceParam command, setting optimization_level(max=2)
+2026-03-26 13:13:40,498 - INFO - calib_set_generator.py:130 - Found model with 3 input channels, using real RGB images for calibration instead of sampling random data.
+2026-03-26 13:13:40,579 - IMPORTANT - logger.py:58 - Starting Model Optimization
+2026-03-26 13:13:40,755 - WARNING - mo_config.py:168 - Reducing optimization level to 0 (the accuracy won't be optimized and compression won't be used) because there's less data than the recommended amount (1024), and there's no available GPU
+2026-03-26 13:13:40,755 - WARNING - mo_config.py:233 - Running model optimization with zero level of optimization is not recommended for production use and might lead to suboptimal accuracy results
+2026-03-26 13:13:40,755 - INFO - mo_script_parser.py:91 - Model received quantization params from the hn
+2026-03-26 13:13:41,670 - INFO - algorithm_base.py:149 - MatmulDecompose skipped
+2026-03-26 13:13:41,696 - INFO - algorithm_base.py:152 - Starting Mixed Precision
+2026-03-26 13:13:41,936 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Mixed Precision is done (completion time is 00:00:00.24)
+2026-03-26 13:13:42,108 - INFO - algorithm_base.py:149 - LayerNorm Decomposition skipped
+2026-03-26 13:13:42,305 - INFO - algorithm_base.py:152 - Starting Statistics Collector
+2026-03-26 13:13:42,323 - INFO - stats_collection.py:89 - Using dataset with 64 entries for calibration
+2026-03-26 13:14:14,952 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Statistics Collector is done (completion time is 00:00:32.63)
+2026-03-26 13:14:15,439 - INFO - algorithm_base.py:152 - Starting Fix zp_comp Encoding
+2026-03-26 13:14:15,439 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Fix zp_comp Encoding is done (completion time is 00:00:00.00)
+2026-03-26 13:14:15,439 - INFO - algorithm_base.py:149 - Matmul Equalization skipped
+2026-03-26 13:14:15,439 - INFO - algorithm_base.py:152 - Starting MatmulDecomposeFix
+2026-03-26 13:14:15,439 - INFO - algorithm_base.py:168 - Model Optimization Algorithm MatmulDecomposeFix is done (completion time is 00:00:00.00)
+2026-03-26 13:14:17,961 - INFO - algorithm_base.py:149 - Finetune encoding skipped
+2026-03-26 13:14:17,961 - INFO - algorithm_base.py:149 - Bias Correction skipped
+2026-03-26 13:14:17,964 - INFO - algorithm_base.py:149 - Adaround skipped
+2026-03-26 13:14:17,965 - INFO - algorithm_base.py:149 - Quantization-Aware Fine-Tuning skipped
+2026-03-26 13:14:19,804 - INFO - algorithm_base.py:149 - Layer Noise Analysis skipped
+2026-03-26 13:14:21,415 - IMPORTANT - logger.py:58 - Model Optimization is done
+2026-03-26 13:14:21,747 - INFO - client_runner.py:1881 - Saved HAR to: /home/sebastien/Software/SAM/nanosam/data/resnet18_encoder_h8l.har

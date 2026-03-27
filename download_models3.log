@@ -1,0 +1,13 @@
+/home/sebastien/Software/SAM/nanosam/venv/lib/python3.13/site-packages/gdown/__main__.py:139: FutureWarning: Option `--id` was deprecated in version 4.3.1 and will be removed in 5.0. You don't need to pass it anymore to use a file ID.
+  warnings.warn(
+Failed to retrieve file url:
+
+	Cannot retrieve the public link of the file. You may need to change
+	the permission to 'Anyone with the link', or have had many accesses.
+	Check FAQ in https://github.com/wkentaro/gdown?tab=readme-ov-file#faq.
+
+You may still be able to access the file from the browser:
+
+	https://drive.google.com/uc?id=14-SsvoaTl-esC3JOzomHDnI9OGgdO2OR
+
+but Gdown can't. Please check connections and permissions.

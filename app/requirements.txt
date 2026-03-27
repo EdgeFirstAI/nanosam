@@ -1,0 +1,6 @@
+gradio>=4.21
+onnx>=1.14.0
+onnxruntime-openvino>=1.14.0
+openvino
+opencv-python-headless
+git+https://github.com/binh234/nanosam.git
