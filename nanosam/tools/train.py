@@ -144,6 +144,11 @@ if __name__ == "__main__":
         help="Distillation loss function.",
     )
     parser.add_argument("--log_step", type=int, default=20)
+    parser.add_argument(
+        "--checkpoint_interval", type=int, default=10,
+        help="Save a named checkpoint every N epochs (e.g. checkpoint_epoch_10.pth). "
+             "Set to 0 to disable.",
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -212,6 +217,16 @@ if __name__ == "__main__":
             {"model": student.state_dict(), "optimizer": optimizer.state_dict(), "epoch": epoch},
             checkpoint_path,
         )
+
+        if args.checkpoint_interval > 0 and (epoch + 1) % args.checkpoint_interval == 0:
+            snapshot_path = os.path.join(
+                args.output_dir, f"checkpoint_epoch_{epoch + 1}.pth"
+            )
+            torch.save(
+                {"model": student.state_dict(), "optimizer": optimizer.state_dict(), "epoch": epoch},
+                snapshot_path,
+            )
+            print(f"Saved snapshot: {snapshot_path}")
 
         # Visual sanity check — compare teacher vs student embedding channel 0
         plt.figure(figsize=(10, 5))
