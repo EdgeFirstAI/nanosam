@@ -15,3 +15,7 @@ hailo_sdk.*.log
 # Local planning/design docs (not for git)
 docs/superpowers/
 .claude/plans/
+
+# Training artifacts and local environment
+runs/
+venv/

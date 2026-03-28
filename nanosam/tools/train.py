@@ -98,7 +98,7 @@ class FeaturePairDataset(Dataset):
         if image.width != self.img_size or image.height != self.img_size:
             image = image.resize((self.img_size, self.img_size), PIL.Image.BILINEAR)
         image = self.transform(image)
-        features = torch.from_numpy(np.load(feat_path).astype(np.float32))
+        features = torch.from_numpy(np.load(feat_path).astype(np.float32)).squeeze(0)
         return image, features
 
 

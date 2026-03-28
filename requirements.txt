@@ -1,0 +1,21 @@
+# NanoSAM — Python dependencies
+#
+# PyTorch must be installed separately with the correct CUDA index URL for your
+# driver.  Find your CUDA version with: nvidia-smi
+#
+#   Driver >= 525  →  CUDA 12.x  →  cu124 (recommended)
+#   Driver >= 450  →  CUDA 11.x  →  cu118
+#
+# Install PyTorch first:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#
+# Then install the remaining dependencies:
+#   pip install -r requirements.txt
+
+timm>=1.0
+numpy>=1.24
+pillow>=9.0
+matplotlib>=3.7
+tqdm>=4.64
+onnx>=1.14
+onnxruntime-gpu>=1.16   # CPU-only: replace with onnxruntime

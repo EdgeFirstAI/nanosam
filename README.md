@@ -46,14 +46,35 @@ The MobileSAM decoder contains attention layers and runs on CPU (ONNX) on all pl
 
 ## Getting Started
 
-### ONNX Runtime (CPU, any platform)
+### Environment Setup
+
+Create a virtual environment and install PyTorch with the CUDA variant that matches your
+driver. Check your driver version with `nvidia-smi` and pick the appropriate index URL:
+
+| nvidia-smi CUDA column | Driver | PyTorch index |
+|------------------------|--------|---------------|
+| 12.x | ≥ 525 | `cu124` (recommended) |
+| 11.x | ≥ 450 | `cu118` |
+| CPU only | — | `cpu` |
 
 ```bash
 git clone https://github.com/au-zone/nanosam -b edgefirst
 cd nanosam
 python3 -m venv venv && source venv/bin/activate
-pip install -e ".[onnx]"
 
+# Install PyTorch first — adjust cu124 to match your system (see table above)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+
+# Install remaining dependencies
+pip install -r requirements.txt
+
+# Install the nanosam package in editable mode
+pip install -e .
+```
+
+### ONNX Runtime inference (CPU, any platform)
+
+```bash
 python3 scripts/basic_usage.py \
     --image_encoder data/resnet18_image_encoder_legacy.onnx \
     --mask_decoder  data/mobile_sam_mask_decoder.onnx
@@ -92,32 +113,80 @@ python3 nanosam/tools/compile_encoder_hailo.py \
 
 ## Distillation Training
 
-Train a new encoder without TensorRT. Pre-extract teacher features once, then train anywhere.
+Train a new ResNet18 encoder from scratch using MobileSAM (ViT-T) as the teacher.
+Features are pre-extracted once on a GPU machine and cached as `.npy` files — no
+TensorRT dependency, and training can resume on any CUDA machine.
 
-**Step 1 — Extract teacher features** (GPU machine, run once)
+### Step 1 — Extract teacher features (run once, GPU required)
+
+The teacher is `assets/mobile_sam.pt` (MobileSAM ViT-T). Features are saved in FP16
+to keep storage manageable: ~118k COCO images produce approximately **230 GB** of `.npy` files.
+Store them on a data volume, not `/home`.
 
 ```bash
 python3 scripts/extract_sam_features.py \
     --checkpoint assets/mobile_sam.pt \
     --model_type  vit_t \
-    --img_dir     data/coco/train2017 \
-    --out_dir     data/coco/features_vit_t
+    --img_dir     /path/to/coco/train2017 \
+    --out_dir     /datax/mobilesam-features-coco \
+    --fp16
 ```
 
-**Step 2 — Train student encoder**
+> **Note:** `--model_type vit_t` routes through the MobileSAM registry.
+> The EfficientViT model types (`l0`, `l1`, `l2`, `xl0`, `xl1`) require a separate
+> `efficientvit` package and a different checkpoint — do not use them with `mobile_sam.pt`.
+
+### Step 2 — Train student encoder
+
+It is recommended to validate the pipeline with a short smoke test before committing
+to a full training run.
+
+**Smoke test** — end-to-end pipeline check (~2 min):
 
 ```bash
 python3 -m nanosam.tools.train \
-    --images      data/coco/train2017 \
-    --features    data/coco/features_vit_t \
-    --output_dir  runs/resnet18_distill \
+    --images      /path/to/coco/train2017 \
+    --features    /datax/mobilesam-features-coco \
+    --output_dir  runs/resnet18_smoke \
     --model_name  resnet18 \
+    --num_images  200 \
+    --num_epochs  3 \
     --batch_size  16
 ```
 
-Available student models: `resnet18`, `efficientvit_b0_sam`, `efficientvit_b1_sam`, `efficientvit_b2_sam`.
+**Convergence check** — verify loss is decreasing with a representative sample:
 
-**Step 3 — Export to ONNX**
+```bash
+python3 -m nanosam.tools.train \
+    --images      /path/to/coco/train2017 \
+    --features    /datax/mobilesam-features-coco \
+    --output_dir  runs/resnet18_mini \
+    --model_name  resnet18 \
+    --num_images  5000 \
+    --num_epochs  20 \
+    --batch_size  16
+```
+
+Loss should drop meaningfully by epoch 5–10. Check `runs/*/images/` for per-epoch
+teacher vs student embedding visualisations.
+
+**Full training run** (200 epochs, all 118k images):
+
+```bash
+python3 -m nanosam.tools.train \
+    --images      /path/to/coco/train2017 \
+    --features    /datax/mobilesam-features-coco \
+    --output_dir  runs/resnet18_distill \
+    --model_name  resnet18 \
+    --num_epochs  200 \
+    --batch_size  16
+```
+
+Training saves a checkpoint after every epoch and resumes automatically if interrupted.
+
+Available student models: `resnet18`, `resnet34`, `resnet50`, `efficientvit_b0`, `efficientvit_b1`.
+
+### Step 3 — Export to ONNX
 
 ```bash
 python3 -m nanosam.tools.export_image_encoder_onnx \
@@ -125,6 +194,9 @@ python3 -m nanosam.tools.export_image_encoder_onnx \
     --checkpoint runs/resnet18_distill/checkpoint.pth \
     --output     data/resnet18_image_encoder.onnx
 ```
+
+The exported ONNX model is ~61 MB with input shape `[1, 3, 1024, 1024]` and output
+shape `[1, 256, 64, 64]`.
 
 ---
 
@@ -136,7 +208,7 @@ Evaluate with ONNX Runtime (no GPU required):
 python3 -m nanosam.tools.eval_coco_onnx \
     --coco_root data/coco/val2017 \
     --coco_ann  data/coco/annotations/instances_val2017.json \
-    --encoder   data/resnet18_image_encoder_legacy.onnx \
+    --encoder   data/resnet18_image_encoder.onnx \
     --decoder   data/mobile_sam_mask_decoder.onnx \
     --output    data/resnet18_coco_results.json
 
