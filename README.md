@@ -40,7 +40,7 @@ The MobileSAM decoder contains attention layers and runs on CPU (ONNX) on all pl
 | Hailo-8L (RPi5) | Hailo-8L NPU | HEF INT8 (36 MB) | 46 | 0.9654 | 125 | ~171 |
 | i.MX 95 + Ara240 | Kinara Ara-2 NPU | DVM INT8 (27 MB) | 45.3 | 0.9961 | 430 | ~475 |
 | i.MX 95 | Neutron NPU | TFLite INT8 (16 MB) | 178 | 0.9784 | 430 | ~608 |
-| i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 (15 MB) | 335 | 0.9972 | 421 | ~756 |
+| i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 (16 MB) | 336 | 0.9972 | 421 | ~757 |
 
 ---
 
@@ -75,9 +75,10 @@ pip install -e .
 ### ONNX Runtime inference (CPU, any platform)
 
 ```bash
-python3 scripts/basic_usage.py \
-    --image_encoder data/resnet18_image_encoder_legacy.onnx \
-    --mask_decoder  data/mobile_sam_mask_decoder.onnx
+python3 scripts/run_inference_onnx.py \
+    --image_encoder data/resnet18_image_encoder.onnx \
+    --mask_decoder  data/mobile_sam_mask_decoder.onnx \
+    --image         assets/dogs.jpg
 ```
 
 ### Raspberry Pi 5 + Hailo-8L
@@ -96,6 +97,24 @@ python3 scripts/rpi5_hailo_inference.py \
     --output  out.jpg
 ```
 
+### NXP i.MX 8M Plus (VeriSilicon NPU)
+
+Requires `tflite-runtime` and `onnxruntime` on the target (both available via pip).
+The VX delegate (`/usr/lib/libvx_delegate.so`) is provided by the NXP BSP and is
+loaded automatically when present.
+
+Copy files to the target, then run:
+
+```bash
+python3 scripts/imx8mp_tflite_inference.py \
+    --encoder encoder_fixed_integer_quant.tflite \
+    --decoder mobile_sam_mask_decoder.onnx \
+    --image   dogs.jpg \
+    --output  out.jpg
+```
+
+Use `--no-npu` to force CPU-only execution for debugging.
+
 ### Compile Hailo-8L HEF from ONNX
 
 Requires [Hailo DFC 3.33.1](https://hailo.ai/developer-zone/) and COCO val2017 images.
@@ -104,7 +123,7 @@ Requires [Hailo DFC 3.33.1](https://hailo.ai/developer-zone/) and COCO val2017 i
 source ~/path/to/hailo_model_zoo/venv/bin/activate
 
 python3 nanosam/tools/compile_encoder_hailo.py \
-    --onnx  data/resnet18_image_encoder_legacy.onnx \
+    --onnx  data/resnet18_image_encoder.onnx \
     --coco  data/coco/val2017 \
     --output data/
 ```
@@ -117,7 +136,19 @@ Train a new ResNet18 encoder from scratch using MobileSAM (ViT-T) as the teacher
 Features are pre-extracted once on a GPU machine and cached as `.npy` files — no
 TensorRT dependency, and training can resume on any CUDA machine.
 
-### Step 1 — Extract teacher features (run once, GPU required)
+### Step 1 — Export the mask decoder (once)
+
+```bash
+source venv/bin/activate
+
+python3 nanosam/tools/export_sam_mask_decoder_onnx.py \
+    --checkpoint  assets/mobile_sam.pt \
+    --model-type  vit_t \
+    --output      data/mobile_sam_mask_decoder.onnx \
+    --return-single-mask
+```
+
+### Step 2 — Extract teacher features (run once, GPU required)
 
 The teacher is `assets/mobile_sam.pt` (MobileSAM ViT-T). Features are saved in FP16
 to keep storage manageable: ~118k COCO images produce approximately **230 GB** of `.npy` files.
@@ -136,7 +167,7 @@ python3 scripts/extract_sam_features.py \
 > The EfficientViT model types (`l0`, `l1`, `l2`, `xl0`, `xl1`) require a separate
 > `efficientvit` package and a different checkpoint — do not use them with `mobile_sam.pt`.
 
-### Step 2 — Train student encoder
+### Step 3 — Train student encoder
 
 It is recommended to validate the pipeline with a short smoke test before committing
 to a full training run.
@@ -186,7 +217,7 @@ Training saves a checkpoint after every epoch and resumes automatically if inter
 
 Available student models: `resnet18`, `resnet34`, `resnet50`, `efficientvit_b0`, `efficientvit_b1`.
 
-### Step 3 — Export to ONNX
+### Step 4 — Export to ONNX
 
 ```bash
 python3 -m nanosam.tools.export_image_encoder_onnx \
@@ -197,6 +228,36 @@ python3 -m nanosam.tools.export_image_encoder_onnx \
 
 The exported ONNX model is ~61 MB with input shape `[1, 3, 1024, 1024]` and output
 shape `[1, 256, 64, 64]`.
+
+### Step 5 — Export to TFLite INT8 (for i.MX NPU targets)
+
+Requires `onnx2tf`, which pulls in TensorFlow and will downgrade `onnx` and `numpy`
+to versions compatible with TF. Install it in a separate step after training is complete,
+or in a dedicated conversion environment.
+
+```bash
+pip install onnx2tf
+```
+
+Then convert with 200 COCO val images for calibration:
+
+```bash
+python3 -m nanosam.tools.export_encoder_tflite \
+    --input          data/resnet18_image_encoder.onnx \
+    --output_dir     data/encoder_tflite \
+    --coco_root      /path/to/coco/val2017 \
+    --num_calibration 200 \
+    --int8
+```
+
+This produces several TFLite variants. The file for NPU deployment is
+`encoder_fixed_integer_quant.tflite` (~16 MB). The model has float32 input/output
+boundaries with INT8 internal quantisation.
+
+> **Layout note:** onnx2tf converts internal ops to NHWC but preserves the original
+> ONNX tensor names and NCHW layout at the model boundaries. The TFLite model
+> therefore accepts NHWC input and returns NCHW output — no post-inference transpose
+> is required before passing the embedding to the ONNX decoder.
 
 ---
 
@@ -224,6 +285,7 @@ python3 -m nanosam.tools.compute_eval_coco_metrics \
 - **Ara240 requires graph surgery** — ConvTranspose with `output_padding=[1,1]` crashes the Kinara scheduler. Workaround replaces it with Resize(nearest)+Conv and substitutes tanh for GELU.
 - **NVIDIA distilled ResNet18 weights** — the original Google Drive link is private. Using ImageNet backbone weights for conversion/deployment validation.
 - **TFLite full INT8 decoder fails on CPU** — Div op in GELU polynomial lacks an INT8 kernel. Works on i.MX NPU targets only.
+- **onnx2tf degrades numpy and onnx** — installing `onnx2tf` downgrades `onnx` to 1.19.x and `numpy` to 1.26.x due to TensorFlow's dependency constraints. Use a separate conversion environment or install it last.
 
 ---
 
