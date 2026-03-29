@@ -56,8 +56,8 @@ if __name__ == "__main__":
 
         model = create_model(args.model_name)
         data = torch.randn(1, 3, args.input_size, args.input_size).to(device)
-        model.load_state_dict(torch.load(args.checkpoint)["model"])
-        model = model.cuda().eval()
+        model.load_state_dict(torch.load(args.checkpoint, map_location=device)["model"])
+        model = model.to(device).eval()
 
         torch.onnx.export(
             model,
