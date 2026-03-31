@@ -1,0 +1,21 @@
+[package]
+name = "nanosam"
+version = "0.1.0"
+edition = "2021"
+description = "NanoSAM: Real-time Segment Anything on edge devices"
+
+[dependencies]
+edgefirst-tflite = "0.4"
+safetensors = "0.4"
+half = "2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+zip = { version = "2", default-features = false }
+clap = { version = "4", features = ["derive"] }
+num_cpus = "1"
+ndarray = "0.16"
+
+# EdgeFirst HAL for optimized image preprocessing and mask rendering
+# Using release/0.15.0 branch (not yet on crates.io)
+edgefirst-image = { path = "/home/sebastien/software/hal/crates/image" }
+edgefirst-tensor = { path = "/home/sebastien/software/hal/crates/tensor" }
+edgefirst-decoder = { path = "/home/sebastien/software/hal/crates/decoder" }
