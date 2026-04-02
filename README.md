@@ -42,6 +42,21 @@ The MobileSAM decoder contains attention layers and runs on CPU (ONNX) on all pl
 | i.MX 95 | Neutron NPU | TFLite INT8 (16 MB) | 178 | 0.9784 | 430 | ~608 |
 | i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 (16 MB) | 336 | 0.9972 | 421 | ~757 |
 
+### EdgeFirst Optimized Pipeline (decomposed decoder, ResNet18 e200)
+
+With the EdgeFirst decomposed decoder (prompt encoder in Rust, attention via
+XNNPACK, heads on NPU, mask assembly on CPU) and HAL preprocessing:
+
+| Platform | Encoder (ms) | Decoder (ms) | Total (ms) | IoU | Notes |
+|----------|:------------:|:------------:|:----------:|:---:|-------|
+| Jetson Orin Nano (MAXN_SUPER) | 15.3 | 6.3 | ~21.6 | 0.99 | TRT FP16 encoder + decoder |
+| i.MX 95 (Neutron) | 104.4 | 146.2 | ~331 | 0.986 | Twin model INT8, XNNPACK attention |
+| i.MX 95 (CPU only, ONNX) | 2953 | 402 | ~3459 | 0.99 | Baseline without NPU |
+
+Naive `onnx2tf` → Neutron conversion **fails** due to float islands from
+GELU/erf — masks are broken (IoU 0.747). See [BENCHMARKS.md](BENCHMARKS.md)
+for full methodology, per-stage breakdown, and visual comparisons.
+
 ---
 
 ## Getting Started

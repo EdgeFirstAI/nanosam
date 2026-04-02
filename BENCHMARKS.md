@@ -191,17 +191,31 @@ same ResNet18 FP16 encoder and monolithic MobileSAM FP16 decoder.
 
 ### Naive NPU Conversion (M1b)
 
-**Result: FAILS — accuracy collapse from float islands**
+**Result: FAILS — broken segmentation masks**
 
-The naive `onnx2tf` conversion of NVIDIA's ResNet18 encoder to TFLite INT8
-produces a model with 37 float32 islands from GELU/erf decomposition. When
-run on the Neutron NPU, the output embedding has a cosine similarity of only
-**0.177** vs the ONNX reference — effectively random. The resulting
-segmentation masks are meaningless.
+The naive `onnx2tf` conversion of NVIDIA's ResNet18 encoder to TFLite INT8,
+followed by Neutron SDK compilation (`neutron-converter --target imx95`),
+produces a model with float32 islands from GELU/erf decomposition. The
+converter splits the graph into **2 NeutronGraph partitions** with **8 float
+operators** remaining on CPU (96.4% conversion ratio):
 
-| Vanilla CPU (Correct) | Naive NPU (Broken) |
-|:---:|:---:|
-| ![CPU Correct](assets/benchmark/imx95_vanilla_cpu.jpg) | ![NPU Broken](assets/benchmark/imx95_naive_npu.jpg) |
+```
+WARNING: Graph "main" has FLOAT operators which are NOT supported!
+```
+
+The model runs (encoder: 198 ms) but the float islands corrupt the
+embedding, producing **garbage segmentation masks** (IoU 0.747 vs 0.986
+for EdgeFirst, mask coverage 4.8% vs expected ~29%):
+
+| Vanilla CPU (Correct) | Naive NPU (Broken) | EdgeFirst NPU (Correct) |
+|:---:|:---:|:---:|
+| ![CPU](assets/benchmark/imx95_vanilla_cpu.jpg) | ![Naive NPU](assets/benchmark/imx95_naive_npu.jpg) | ![EdgeFirst](assets/benchmark/imx95_edgefirst.jpg) |
+
+EdgeFirst solves this with a **twin model** approach: rebuild the encoder
+in Keras with tanh-approximate GELU (fully INT8-quantizable), transfer
+weights from PyTorch, and fuse BatchNorm offline. Result: zero float
+islands, full Neutron delegation, encoder at **104.4 ms** with correct
+masks (IoU 0.986).
 
 ### EdgeFirst NanoSAM (M2)
 

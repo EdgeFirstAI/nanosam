@@ -384,11 +384,15 @@ def run_npu_benchmark(args):
     # Check if input is quantized
     input_dtype = input_details['dtype']
     input_quant = input_details.get('quantization_parameters', {})
-    input_scale = input_quant.get('scales', np.array([1.0]))[0]
-    input_zp = input_quant.get('zero_points', np.array([0]))[0]
+    input_scales = input_quant.get('scales', np.array([1.0]))
+    input_scale = input_scales[0] if len(input_scales) > 0 else 1.0
+    input_zps = input_quant.get('zero_points', np.array([0]))
+    input_zp = input_zps[0] if len(input_zps) > 0 else 0
     output_quant = output_details.get('quantization_parameters', {})
-    output_scale = output_quant.get('scales', np.array([1.0]))[0]
-    output_zp = output_quant.get('zero_points', np.array([0]))[0]
+    output_scales = output_quant.get('scales', np.array([1.0]))
+    output_scale = output_scales[0] if len(output_scales) > 0 else 1.0
+    output_zps = output_quant.get('zero_points', np.array([0]))
+    output_zp = output_zps[0] if len(output_zps) > 0 else 0
 
     if input_dtype == np.int8:
         print(f"  Input quantization: scale={input_scale}, zero_point={input_zp}")
