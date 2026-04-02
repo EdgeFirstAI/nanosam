@@ -191,17 +191,13 @@ same ResNet18 encoder and monolithic MobileSAM TRT decoder.
 
 ### Naive NPU Conversion (M1b)
 
-**Result: FAILS — two independent blockers**
+**Result: FAILS — accuracy collapse from float islands**
 
-1. **Delegate API incompatibility:** Standard Python `tflite_runtime` (2.19.0)
-   cannot load the Neutron delegate — fails with
-   `undefined symbol: tflite_plugin_create_delegate`. The TFLite model
-   containing `NeutronGraph` custom ops fails with "unresolved custom op".
-
-2. **Accuracy collapse:** Even if loading succeeds, the naive `onnx2tf`
-   conversion of NVIDIA's ResNet18 encoder produces 37 float32 islands
-   from GELU/erf decomposition, with cosine similarity of only **0.177**
-   vs the ONNX reference — effectively random output.
+The naive `onnx2tf` conversion of NVIDIA's ResNet18 encoder to TFLite INT8
+produces a model with 37 float32 islands from GELU/erf decomposition. When
+run on the Neutron NPU, the output embedding has a cosine similarity of only
+**0.177** vs the ONNX reference — effectively random. The resulting
+segmentation masks are meaningless.
 
 | Vanilla CPU (Correct) | Naive NPU (Broken) |
 |:---:|:---:|

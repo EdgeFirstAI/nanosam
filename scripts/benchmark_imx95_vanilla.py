@@ -337,8 +337,8 @@ def run_npu_benchmark(args):
 
     # Find Neutron delegate
     neutron_paths = [
-        "/usr/lib/libNeutronDriver.so",
-        "/usr/lib/libNeutronDelegate.so",
+        "/usr/lib/libneutron_delegate.so",
+        "/usr/lib/liblitert_neutron_delegate.so",
     ]
     neutron_lib = None
     for p in neutron_paths:
