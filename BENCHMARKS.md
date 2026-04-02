@@ -256,7 +256,7 @@ xychart-beta
 
 ```bash
 # Set performance mode
-sudo nvpmodel -m 0
+sudo nvpmodel -m 2   # MAXN_SUPER
 sudo jetson_clocks
 ```
 
@@ -284,10 +284,10 @@ python3 scripts/benchmark_jetson_nvidia.py \
 
 ```bash
 cd ~/models/nanosam
-python3 scripts/benchmark_jetson_edgefirst.py \
+python3 scripts/benchmark_jetson_nvidia.py \
   --image assets/dogs.jpg \
   --encoder data/resnet18_e200.engine \
-  --decoder data/mobile_sam_mask_decoder.engine \
+  --decoder ../nanosam-nvidia/data/mobile_sam_mask_decoder.engine \
   --box 100 100 850 759 --warmup 10 --runs 100
 ```
 
@@ -328,6 +328,7 @@ python3 scripts/benchmark_imx95_vanilla.py npu \
   --models nanosam_imx95.zip \
   --image assets/dogs.jpg \
   --box 100 100 850 759 \
-  --delegate /usr/lib/libNeutronDelegate.so \
+  --delegate /usr/lib/libneutron_delegate.so \
+  --xnnpack \
   --warmup 10 --runs 100
 ```
