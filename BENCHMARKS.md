@@ -103,8 +103,7 @@ attention block's softmax and LayerNorm operations amplify quantization
 error through three compounding stages: dot-product accumulation (~5.7x
 amplification), exponential softmax (65–170% weight shifts from small
 quantization deltas), and LayerNorm variance sensitivity. Full INT8
-achieves only 48.2% binary mask IoU vs 1.0 for FP32 (see
-[sam-decoder analysis](../sam-decoder/QUANT.md)).
+achieves only 48.2% binary mask IoU vs 1.0 for FP32.
 
 By splitting the decoder at the transformer boundary, we keep the
 error-sensitive attention in FP16 on CPU (XNNPACK) while offloading the
