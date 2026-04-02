@@ -12,7 +12,8 @@ except ImportError:
     onnxruntime_exists = False
 
 
-def run_export(model_type, checkpoint, output, opset, gelu_approximate=False):
+def run_export(model_type, checkpoint, output, opset, gelu_approximate=False,
+               num_points=2):
     print("Loading model...")
     sam = sam_model_registry[model_type](checkpoint=checkpoint)
 
@@ -32,11 +33,11 @@ def run_export(model_type, checkpoint, output, opset, gelu_approximate=False):
     embed_size = sam.prompt_encoder.image_embedding_size
     mask_input_size = [4 * x for x in embed_size]
 
-    # Fixed num_points=2 for bounding box prompts (labels 2=top-left, 3=bottom-right)
+    # Fixed num_points for static shape export (default: 2 for bounding box prompts)
     dummy_inputs = {
         "image_embeddings": torch.randn(1, embed_dim, *embed_size, dtype=torch.float),
-        "point_coords": torch.randint(low=0, high=1024, size=(1, 2, 2), dtype=torch.float),
-        "point_labels": torch.randint(low=0, high=4, size=(1, 2), dtype=torch.float),
+        "point_coords": torch.randint(low=0, high=1024, size=(1, num_points, 2), dtype=torch.float),
+        "point_labels": torch.randint(low=0, high=4, size=(1, num_points), dtype=torch.float),
         "mask_input": torch.randn(1, 1, *mask_input_size, dtype=torch.float),
         "has_mask_input": torch.tensor([1], dtype=torch.float),
     }
@@ -75,13 +76,15 @@ def run_export(model_type, checkpoint, output, opset, gelu_approximate=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Export SAM mask decoder to static ONNX (fixed num_points=2, for TFLite conversion)."
+        description="Export SAM mask decoder to static ONNX (fixed num_points, for TFLite conversion)."
     )
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--model-type", type=str, required=True)
     parser.add_argument("--opset", type=int, default=13)
     parser.add_argument("--gelu-approximate", action="store_true")
+    parser.add_argument("--num-points", type=int, default=2,
+                        help="Number of prompt points (default: 2 for box prompt)")
     args = parser.parse_args()
 
     run_export(
@@ -90,4 +93,5 @@ if __name__ == "__main__":
         output=args.output,
         opset=args.opset,
         gelu_approximate=args.gelu_approximate,
+        num_points=args.num_points,
     )
