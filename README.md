@@ -31,31 +31,34 @@ The MobileSAM decoder contains attention layers and runs on CPU (ONNX) on all pl
 > NVIDIA's distilled weights are inaccessible (private). When distilled weights are available,
 > actual segmentation accuracy can be measured with the same exported models.
 
-### Encoder + Decoder (ResNet18, initial measurements)
+### Encoder-only benchmarks (ResNet18, monolithic ONNX decoder on CPU)
 
 | Platform | Accelerator | Format | Encoder (ms) | Mask IoU vs ONNX | Decoder CPU (ms) | Total (ms) |
 |----------|-------------|--------|:------------:|:----------------:|:----------------:|:----------:|
 | x86_64 | ONNX Runtime | ONNX FP32 (61 MB) | ~200 | baseline | 15.8 | ~216 |
-| Jetson Orin Nano Super | NVIDIA GPU | TRT FP16 (33 MB) | 12.8 | 0.9999 | 63.3 | ~76 |
+| Jetson Orin Nano | NVIDIA GPU | TRT FP16 (33 MB) | 12.8 | 0.9999 | 63.3 | ~76 |
 | Hailo-8L (RPi5) | Hailo-8L NPU | HEF INT8 (36 MB) | 46 | 0.9654 | 125 | ~171 |
 | i.MX 95 + Ara240 | Kinara Ara-2 NPU | DVM INT8 (27 MB) | 45.3 | 0.9961 | 430 | ~475 |
-| i.MX 95 | Neutron NPU | TFLite INT8 (16 MB) | 178 | 0.9784 | 430 | ~608 |
 | i.MX 8M Plus | VeriSilicon NPU | TFLite INT8 (16 MB) | 336 | 0.9972 | 421 | ~757 |
 
-### EdgeFirst Optimized Pipeline (decomposed decoder, ResNet18 e200)
+> **Note:** Naive `onnx2tf` → Neutron NPU conversion of the encoder **fails** due to
+> float islands from GELU/erf — masks are broken (IoU 0.747). See the EdgeFirst
+> optimized results below and [BENCHMARKS.md](BENCHMARKS.md) for details.
 
-With the EdgeFirst decomposed decoder (prompt encoder in Rust, attention via
-XNNPACK, heads on NPU, mask assembly on CPU) and HAL preprocessing:
+### EdgeFirst optimized pipeline (decomposed decoder, ResNet18 e200)
+
+With the EdgeFirst twin model encoder (clean INT8, zero float islands),
+decomposed decoder (prompt encoder in Rust, attention via XNNPACK, heads on
+NPU, mask assembly on CPU), and HAL preprocessing:
 
 | Platform | Encoder (ms) | Decoder (ms) | Total (ms) | IoU | Notes |
 |----------|:------------:|:------------:|:----------:|:---:|-------|
 | Jetson Orin Nano (MAXN_SUPER) | 15.3 | 6.3 | ~21.6 | 0.99 | TRT FP16 encoder + decoder |
-| i.MX 95 (Neutron) | 104.4 | 146.2 | ~331 | 0.986 | Twin model INT8, XNNPACK attention |
+| i.MX 95 (Neutron NPU) | 104.4 | 146.2 | ~331 | 0.986 | Twin model INT8, XNNPACK attention |
 | i.MX 95 (CPU only, ONNX) | 2953 | 402 | ~3459 | 0.99 | Baseline without NPU |
 
-Naive `onnx2tf` → Neutron conversion **fails** due to float islands from
-GELU/erf — masks are broken (IoU 0.747). See [BENCHMARKS.md](BENCHMARKS.md)
-for full methodology, per-stage breakdown, and visual comparisons.
+See [BENCHMARKS.md](BENCHMARKS.md) for full methodology, per-stage
+breakdown, and visual comparisons.
 
 ---
 
