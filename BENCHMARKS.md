@@ -15,8 +15,8 @@ preprocessing work.
 
 | Platform | Config | Total Latency | Speedup |
 |----------|--------|--------------|---------|
-| Jetson Orin Nano | NVIDIA Baseline | 25.18 ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | 25.27 ms | 1.00x |
+| Jetson Orin Nano | NVIDIA Baseline | 21.56 ms | 1.0x |
+| Jetson Orin Nano | EdgeFirst | 21.77 ms | 1.00x |
 | i.MX 95 | Vanilla (CPU) | 3458.79 ms | 1.0x |
 | i.MX 95 | Vanilla (NPU) | FAILS | — |
 | i.MX 95 | EdgeFirst | 330.7 ms | 10.5x |
@@ -141,26 +141,26 @@ Result: zero float islands, cosine 0.9398 vs ONNX reference.
 
 ### NVIDIA NanoSAM Baseline (J1)
 
-100 runs, 10 warmup.
+100 runs, 10 warmup. Both encoder and decoder are TensorRT FP16.
 
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | 15.21 | 15.20 | 0.11 | 14.94 | 15.59 | 15.38 | 15.56 |
-| Decoder | 9.97 | 9.93 | 0.21 | 9.78 | 11.78 | 10.21 | 10.35 |
-| **Total** | **25.18** | **25.13** | **0.26** | **24.79** | **27.12** | **25.48** | **25.66** |
+| Preprocess + Encoder | 15.27 | 15.26 | 0.10 | 15.08 | 15.63 | 15.42 | 15.62 |
+| Decoder (FP16) | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 | 6.48 | 6.89 |
+| **Total** | **21.56** | **21.52** | **0.26** | **21.15** | **23.53** | **21.87** | **22.08** |
 
 ### EdgeFirst NanoSAM (J2)
 
-100 runs, 10 warmup. Same ResNet18 architecture and same monolithic TRT
+100 runs, 10 warmup. Same ResNet18 architecture and same monolithic TRT FP16
 decoder as J1 — timings are essentially identical. EdgeFirst Jetson
 differentiation will come from future decomposed decoder and HAL
 preprocessing work.
 
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | 15.26 | 15.25 | 0.10 | 15.03 | 15.61 | 15.42 | 15.60 |
-| Decoder | 10.02 | 9.98 | 0.21 | 9.86 | 11.85 | 10.25 | 10.42 |
-| **Total** | **25.27** | **25.23** | **0.25** | **24.93** | **27.25** | **25.59** | **25.72** |
+| Preprocess + Encoder | 15.37 | 15.35 | 0.11 | 15.18 | 15.98 | 15.60 | 15.73 |
+| Decoder (FP16) | 6.40 | 6.34 | 0.27 | 6.14 | 8.55 | 6.65 | 6.88 |
+| **Total** | **21.77** | **21.65** | **0.32** | **21.37** | **23.95** | **22.15** | **22.55** |
 
 ### Jetson Comparison
 
@@ -169,12 +169,12 @@ preprocessing work.
 xychart-beta
     title "Jetson Orin Nano: End-to-End Latency (ms)"
     x-axis ["NVIDIA Baseline", "EdgeFirst"]
-    y-axis "Latency (ms)" 0 --> 30
-    bar [25.18, 25.27]
+    y-axis "Latency (ms)" 0 --> 25
+    bar [21.56, 21.77]
 ```
 
-J1 and J2 are within measurement noise (<0.4% difference). Both use the
-same ResNet18 encoder and monolithic MobileSAM TRT decoder.
+J1 and J2 are within measurement noise (<1% difference). Both use the
+same ResNet18 FP16 encoder and monolithic MobileSAM FP16 decoder.
 
 ## NXP i.MX 95 Results
 
@@ -239,8 +239,8 @@ xychart-beta
 
 | Platform | Config | Encoder | Decoder | Preprocess | Total | vs Baseline |
 |----------|--------|---------|---------|------------|-------|-------------|
-| Jetson Orin Nano | NVIDIA Baseline | 15.21 ms | 9.97 ms | incl. | 25.18 ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | 15.26 ms | 10.02 ms | incl. | 25.27 ms | 1.00x |
+| Jetson Orin Nano | NVIDIA Baseline | 15.27 ms | 6.29 ms | incl. | 21.56 ms | 1.0x |
+| Jetson Orin Nano | EdgeFirst | 15.37 ms | 6.40 ms | incl. | 21.77 ms | 1.00x |
 | i.MX 95 | Vanilla CPU | 2953.25 ms | 402.07 ms | 103.47 ms | 3458.79 ms | 1.0x |
 | i.MX 95 | EdgeFirst NPU | 104.4 ms | 146.2 ms | 67.4 ms | 330.7 ms | 10.5x |
 
