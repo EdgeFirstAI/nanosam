@@ -6,7 +6,7 @@
 |----------|--------|--------------|-------|
 | Jetson Orin Nano | TensorRT FP16 | 21.6 ms | GPU reference |
 | i.MX 95 | Vanilla CPU (ONNX) | 3,459 ms | No NPU — baseline |
-| i.MX 95 | Naive onnx2tf → NPU | BROKEN | Float islands → garbage masks |
+| i.MX 95 | Naive onnx2tf → NPU | 697 ms | Runs but garbage masks |
 | i.MX 95 | **EdgeFirst NPU** | **331 ms** | **10.5x speedup** |
 
 | Vanilla CPU (Correct) | Naive onnx2tf → NPU (Broken) | EdgeFirst NPU (Correct) |
@@ -93,7 +93,8 @@ BN fusion) to eliminate the float islands that break naive onnx2tf conversion.
 
 Naive conversion produces 37 float32 islands from GELU/erf. After Neutron
 SDK compilation, 8 float ops remain on CPU (96.4% conversion ratio). The
-model runs (198 ms) but produces garbage masks (coverage 4.8% vs ~29%).
+model runs (encoder 198 ms, decoder 366 ms, total 697 ms) but produces
+garbage masks (coverage 4.8% vs ~29%).
 
 ### EdgeFirst Optimized (Neutron NPU + XNNPACK)
 
