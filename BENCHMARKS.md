@@ -111,10 +111,13 @@ native TFLite INT8 kernel, `onnx2tf` inserts dequantize-to-float32-to-quantize
 sequences around every GELU, creating **37 float32 islands**
 in what should be a fully quantized graph.
 
-These float islands cause:
+When this TFLite model is compiled with the Neutron SDK (`neutron-converter`),
+only 8 of these float operators survive as CPU fallbacks (96.4% conversion
+ratio), but those 8 operators are enough to corrupt the embedding and produce
+garbage segmentation masks:
 1. **Accuracy collapse:** Cosine similarity drops to 0.177 (vs 0.94+ for EdgeFirst)
-2. **NPU rejection:** Neutron delegate falls back to CPU for float operations
-3. **Garbage output:** Segmentation masks are meaningless
+2. **Split execution:** Neutron creates 2 partitions separated by float ops on CPU
+3. **Garbage output:** IoU drops to 0.747, mask coverage 4.8% vs expected ~29%
 
 EdgeFirst solves this with a **twin model** approach: rebuild the encoder
 in Keras with tanh-approximate GELU (fully INT8-quantizable), transfer
@@ -128,8 +131,8 @@ FP16, MAXN_SUPER power mode.
 
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | 15.27 | 15.26 | 0.10 | 15.08 | 15.63 | 15.42 | 15.62 |
-| Decoder (FP16) | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 | 6.48 | 6.89 |
+| Encoder (TRT FP16) | 15.27 | 15.26 | 0.10 | 15.08 | 15.63 | 15.42 | 15.62 |
+| Decoder (TRT FP16) | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 | 6.48 | 6.89 |
 | **Total** | **21.56** | **21.52** | **0.26** | **21.15** | **23.53** | **21.87** | **22.08** |
 
 | ![Jetson Mask](assets/benchmark/jetson_nvidia_baseline.jpg) |
@@ -175,9 +178,13 @@ for EdgeFirst, mask coverage 4.8% vs expected ~29%):
 ### EdgeFirst NanoSAM (optimized)
 
 100 runs, 10 warmup. Twin model INT8 encoder on Neutron NPU, decomposed
-decoder with XNNPACK attention, Rust CLI pipeline.
+decoder with XNNPACK attention, Rust CLI pipeline. Values are averages
+across all runs (per-run distribution not available from the Rust CLI).
 
 IoU: [0.912, 0.986, 0.974, 0.970] — correct output, best mask IoU 0.986.
+
+> **Decoder total** = prompt encoder + attention + heads + tokens + mask
+> assembly (146.2 ms). Postprocess (12.8 ms) is measured separately.
 
 | Stage | Mean (avg, ms) |
 |-------|----------------|
@@ -265,7 +272,7 @@ neutron-converter \
 
 python3 scripts/benchmark_imx95_vanilla.py npu \
   --image assets/dogs.jpg \
-  --encoder data/encoder_naive_neutron.tflite \
+  --encoder-tflite data/encoder_naive_neutron.tflite \
   --decoder data/mobile_sam_mask_decoder.onnx \
   --box 100 100 850 759
 ```
