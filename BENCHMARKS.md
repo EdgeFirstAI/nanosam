@@ -5,17 +5,21 @@ EdgeFirst-optimized NanoSAM on edge platforms.
 
 ## Executive Summary
 
-EdgeFirst optimizations deliver significant speedups on both Jetson Orin Nano
-and NXP i.MX 95, while solving the fundamental NPU quantization problem that
-prevents vanilla NanoSAM from running on integer-only accelerators.
+On the NXP i.MX 95, EdgeFirst optimizations deliver a **10.5x speedup**
+(3459 ms to 331 ms) while solving the fundamental NPU quantization problem
+that prevents vanilla NanoSAM from running on integer-only accelerators.
+On Jetson Orin Nano, J1 and J2 use the same ResNet18 architecture and
+monolithic TRT decoder, so timings are essentially identical; EdgeFirst
+Jetson differentiation will come from future decomposed decoder and HAL
+preprocessing work.
 
 | Platform | Config | Total Latency | Speedup |
 |----------|--------|--------------|---------|
-| Jetson Orin Nano | NVIDIA Baseline | [J1_TOTAL] ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | [J2_TOTAL] ms | [J_SPEEDUP]x |
-| i.MX 95 | Vanilla (CPU) | [M1a_TOTAL] ms | 1.0x |
+| Jetson Orin Nano | NVIDIA Baseline | 25.18 ms | 1.0x |
+| Jetson Orin Nano | EdgeFirst | 25.27 ms | 1.00x |
+| i.MX 95 | Vanilla (CPU) | 3458.79 ms | 1.0x |
 | i.MX 95 | Vanilla (NPU) | FAILS | — |
-| i.MX 95 | EdgeFirst | [M2_TOTAL] ms | [M_SPEEDUP]x |
+| i.MX 95 | EdgeFirst | 330.7 ms | 10.5x |
 
 ### Visual Comparison
 
@@ -35,7 +39,7 @@ prevents vanilla NanoSAM from running on integer-only accelerators.
 
 ### Test Setup
 
-- **Test image:** `dogs.jpg` (886x1330 RGB)
+- **Test image:** `dogs.jpg` (1180x760 RGB)
 - **Prompt:** Bounding box [100, 100, 850, 759]
 - **Protocol:** 10 warmup runs (discarded) + 100 timed runs
 - **Statistics:** mean, median, standard deviation, min, max, p95, p99
@@ -49,9 +53,9 @@ prevents vanilla NanoSAM from running on integer-only accelerators.
 | **SoC** | NVIDIA Orin (Ampere GPU) | NXP i.MX 95 |
 | **CPU** | 6-core Arm Cortex-A78AE | 6-core Arm Cortex-A55 |
 | **Accelerator** | 1024-core Ampere GPU + 2x NVDLA | Neutron NPU |
-| **Memory** | 8 GB LPDDR5 | 8 GB LPDDR5 |
-| **Power Mode** | MAXN + jetson_clocks | performance governor |
-| **SW** | [JETPACK_VERSION] | [BSP_VERSION] |
+| **Memory** | 8 GB LPDDR5 | 16 GB LPDDR5 |
+| **Power Mode** | MAXN_SUPER + jetson_clocks | performance governor |
+| **SW** | JetPack 6.2 (R36 rev 4.4), TensorRT 10.3.0.30, CUDA 12.5 | BSP 6.12-walnascar, kernel 6.12.49-lts-next, Neutron v1.0.0-d98743a7 |
 
 ## Pipeline Architecture
 
@@ -137,19 +141,26 @@ Result: zero float islands, cosine 0.9398 vs ONNX reference.
 
 ### NVIDIA NanoSAM Baseline (J1)
 
+100 runs, 10 warmup.
+
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | [J1_ENC] | | | | | | |
-| Decoder | [J1_DEC] | | | | | | |
-| **Total** | **[J1_TOTAL]** | | | | | | |
+| Preprocess + Encoder | 15.21 | 15.20 | 0.11 | 14.94 | 15.59 | 15.38 | 15.56 |
+| Decoder | 9.97 | 9.93 | 0.21 | 9.78 | 11.78 | 10.21 | 10.35 |
+| **Total** | **25.18** | **25.13** | **0.26** | **24.79** | **27.12** | **25.48** | **25.66** |
 
 ### EdgeFirst NanoSAM (J2)
 
+100 runs, 10 warmup. Same ResNet18 architecture and same monolithic TRT
+decoder as J1 — timings are essentially identical. EdgeFirst Jetson
+differentiation will come from future decomposed decoder and HAL
+preprocessing work.
+
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | [J2_ENC] | | | | | | |
-| Decoder | [J2_DEC] | | | | | | |
-| **Total** | **[J2_TOTAL]** | | | | | | |
+| Preprocess + Encoder | 15.26 | 15.25 | 0.10 | 15.03 | 15.61 | 15.42 | 15.60 |
+| Decoder | 10.02 | 9.98 | 0.21 | 9.86 | 11.85 | 10.25 | 10.42 |
+| **Total** | **25.27** | **25.23** | **0.25** | **24.93** | **27.25** | **25.59** | **25.72** |
 
 ### Jetson Comparison
 
@@ -158,31 +169,39 @@ Result: zero float islands, cosine 0.9398 vs ONNX reference.
 xychart-beta
     title "Jetson Orin Nano: End-to-End Latency (ms)"
     x-axis ["NVIDIA Baseline", "EdgeFirst"]
-    y-axis "Latency (ms)" 0 --> 100
-    bar [0, 0]
+    y-axis "Latency (ms)" 0 --> 30
+    bar [25.18, 25.27]
 ```
 
-*Chart will be populated with actual measurements.*
+J1 and J2 are within measurement noise (<0.4% difference). Both use the
+same ResNet18 encoder and monolithic MobileSAM TRT decoder.
 
 ## NXP i.MX 95 Results
 
 ### Vanilla NanoSAM on CPU (M1a)
 
+50 runs, 5 warmup.
+
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess (CPU) | [M1a_PRE] | | | | | | |
-| Encoder (ONNX CPU) | [M1a_ENC] | | | | | | |
-| Decoder (ONNX CPU) | [M1a_DEC] | | | | | | |
-| **Total** | **[M1a_TOTAL]** | | | | | | |
+| Preprocess (CPU) | 103.47 | 103.41 | 1.79 | 101.25 | 106.91 | 105.60 | 106.45 |
+| Encoder (ONNX CPU) | 2953.25 | 2952.12 | 5.23 | 2947.20 | 2979.98 | 2962.60 | 2972.08 |
+| Decoder (ONNX CPU) | 402.07 | 402.05 | 2.70 | 396.68 | 409.30 | 406.23 | 408.04 |
+| **Total** | **3458.79** | **3458.16** | **5.73** | **3450.30** | **3484.65** | **3467.87** | **3476.66** |
 
 ### Naive NPU Conversion (M1b)
 
-**Result: FAILS**
+**Result: FAILS — two independent blockers**
 
-The naive `onnx2tf` conversion of NVIDIA's ResNet18 encoder to TFLite INT8
-produces a model with 37 float32 islands due to GELU/erf decomposition.
-When run on the Neutron NPU, the output embedding has a cosine similarity
-of only **0.177** with the reference — effectively random.
+1. **Delegate API incompatibility:** Standard Python `tflite_runtime` (2.19.0)
+   cannot load the Neutron delegate — fails with
+   `undefined symbol: tflite_plugin_create_delegate`. The TFLite model
+   containing `NeutronGraph` custom ops fails with "unresolved custom op".
+
+2. **Accuracy collapse:** Even if loading succeeds, the naive `onnx2tf`
+   conversion of NVIDIA's ResNet18 encoder produces 37 float32 islands
+   from GELU/erf decomposition, with cosine similarity of only **0.177**
+   vs the ONNX reference — effectively random output.
 
 | Vanilla CPU (Correct) | Naive NPU (Broken) |
 |:---:|:---:|
@@ -190,17 +209,22 @@ of only **0.177** with the reference — effectively random.
 
 ### EdgeFirst NanoSAM (M2)
 
-| Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
-|-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess (HAL GPU) | [M2_PRE] | | | | | | |
-| Encoder (Neutron INT8) | [M2_ENC] | | | | | | |
-| Prompt Encoder (Rust) | [M2_PE] | | | | | | |
-| Attention (XNNPACK) | [M2_ATT] | | | | | | |
-| Heads A+B (Neutron INT8) | [M2_HEADS] | | | | | | |
-| Tokens (CPU) | [M2_TOK] | | | | | | |
-| Mask Assembly (CPU) | [M2_MASK] | | | | | | |
-| Postprocess | [M2_POST] | | | | | | |
-| **Total** | **[M2_TOTAL]** | | | | | | |
+100 runs, 10 warmup. Per-run statistics are not available from the Rust
+CLI; values below are averaged across all runs.
+
+IoU: [0.912, 0.986, 0.974, 0.970] — correct output, best mask IoU 0.986.
+
+| Stage | Mean (avg, ms) |
+|-------|----------------|
+| Preprocess (resize + pad) | 67.4 |
+| Encoder (Neutron INT8) | 104.4 |
+| Prompt Encoder (Rust) | 1.3 |
+| Attention (XNNPACK FP16) | 103.2 |
+| Heads A+B (Neutron INT8) | 5.8 |
+| Tokens (CPU) | 0.6 |
+| Mask Assembly (matmul) | 35.3 |
+| Postprocess (upscale) | 12.8 |
+| **Pipeline Total** | **330.7** |
 
 ### i.MX 95 Comparison
 
@@ -209,20 +233,20 @@ of only **0.177** with the reference — effectively random.
 xychart-beta
     title "i.MX 95: End-to-End Latency (ms)"
     x-axis ["Vanilla CPU", "EdgeFirst NPU"]
-    y-axis "Latency (ms)" 0 --> 2000
-    bar [0, 0]
+    y-axis "Latency (ms)" 0 --> 4000
+    bar [3459, 331]
 ```
 
-*Chart will be populated with actual measurements.*
+**10.5x speedup** (3459 ms to 331 ms).
 
 ## Cross-Platform Summary
 
 | Platform | Config | Encoder | Decoder | Preprocess | Total | vs Baseline |
 |----------|--------|---------|---------|------------|-------|-------------|
-| Jetson Orin Nano | NVIDIA Baseline | [J1_ENC] ms | [J1_DEC] ms | incl. | [J1_TOTAL] ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | [J2_ENC] ms | [J2_DEC] ms | incl. | [J2_TOTAL] ms | [J_SPEEDUP]x |
-| i.MX 95 | Vanilla CPU | [M1a_ENC] ms | [M1a_DEC] ms | [M1a_PRE] ms | [M1a_TOTAL] ms | 1.0x |
-| i.MX 95 | EdgeFirst NPU | [M2_ENC] ms | [M2_DEC_TOTAL] ms | [M2_PRE] ms | [M2_TOTAL] ms | [M_SPEEDUP]x |
+| Jetson Orin Nano | NVIDIA Baseline | 15.21 ms | 9.97 ms | incl. | 25.18 ms | 1.0x |
+| Jetson Orin Nano | EdgeFirst | 15.26 ms | 10.02 ms | incl. | 25.27 ms | 1.00x |
+| i.MX 95 | Vanilla CPU | 2953.25 ms | 402.07 ms | 103.47 ms | 3458.79 ms | 1.0x |
+| i.MX 95 | EdgeFirst NPU | 104.4 ms | 146.2 ms | 67.4 ms | 330.7 ms | 10.5x |
 
 ## Reproduction
 
