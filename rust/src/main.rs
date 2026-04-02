@@ -66,6 +66,11 @@ enum Command {
         #[arg(long)]
         save_all_masks: bool,
 
+        /// Mask logit threshold (default 0.0; use negative values like -2.0
+        /// to recover borderline pixels lost to INT8 quantization)
+        #[arg(long, default_value_t = 0.0)]
+        mask_threshold: f32,
+
         /// Warmup runs before timing
         #[arg(long, default_value_t = 1)]
         warmup: usize,
@@ -108,6 +113,11 @@ enum Command {
         /// Number of TFLite threads
         #[arg(long, default_value_t = 0)]
         threads: usize,
+
+        /// Mask logit threshold (default 0.0; use negative values like -2.0
+        /// to recover borderline pixels lost to INT8 quantization)
+        #[arg(long, default_value_t = 0.0)]
+        mask_threshold: f32,
 
         /// Warmup iterations
         #[arg(long, default_value_t = 5)]
@@ -234,7 +244,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Command::Segment {
             models, image, r#box, point, label, output, delegate,
-            xnnpack, threads, mask_index, save_all_masks, warmup, runs,
+            xnnpack, threads, mask_index, save_all_masks, mask_threshold,
+            warmup, runs,
         } => {
             let prompt = build_prompt(&r#box, &point, &label)?;
             let config = build_config(&models, &delegate, xnnpack, threads);
@@ -282,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let preprocess_ms = t_pre.elapsed().as_secs_f64() * 1000.0;
 
                 let (emb, encoder_ms) = session.encoder.encode_i8(&i8_data, original_hw)?;
-                let (masks, best, timings) = session.decode_low_res(&emb, &prompt)?;
+                let (masks, best, timings) = session.decode_low_res_threshold(&emb, &prompt, mask_threshold)?;
 
                 accumulated.preprocess_ms += preprocess_ms;
                 accumulated.encoder_ms += encoder_ms;
@@ -348,7 +359,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Command::Bench {
             models, image, r#box, point, label, delegate,
-            xnnpack, threads, warmup, runs,
+            xnnpack, threads, mask_threshold, warmup, runs,
         } => {
             let prompt = build_prompt(&r#box, &point, &label)?;
             let config = build_config(&models, &delegate, xnnpack, threads);
@@ -374,7 +385,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let (i8_data, hw) =
                     nanosam::hal::preprocess_image_hal(&mut proc, &image, &quant)?;
                 let (emb, _) = session.encoder.encode_i8(&i8_data, hw)?;
-                let (masks, best, _) = session.decode_low_res(&emb, &prompt)?;
+                let (masks, best, _) = session.decode_low_res_threshold(&emb, &prompt, mask_threshold)?;
                 proc.convert(
                     &base_img, &mut render_dst,
                     edgefirst_image::Rotation::None, edgefirst_image::Flip::None,
@@ -395,7 +406,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let preprocess_ms = t_pre.elapsed().as_secs_f64() * 1000.0;
 
                 let (emb, encoder_ms) = session.encoder.encode_i8(&i8_data, hw)?;
-                let (masks, best, timings) = session.decode_low_res(&emb, &prompt)?;
+                let (masks, best, timings) = session.decode_low_res_threshold(&emb, &prompt, mask_threshold)?;
 
                 // Reset render target to base image, then overlay mask
                 let t_post = std::time::Instant::now();

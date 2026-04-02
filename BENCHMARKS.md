@@ -194,7 +194,8 @@ for EdgeFirst, mask coverage 4.8% vs expected ~29%):
 decoder with XNNPACK attention, Rust CLI pipeline. Values are averages
 across all runs (per-run distribution not available from the Rust CLI).
 
-IoU: [0.912, 0.986, 0.974, 0.970] — correct output, best mask IoU 0.986.
+> **Note:** The INT8 encoder mask has visible quality loss compared to
+> the float model — missing coverage on parts of the dog's body.
 
 > **Decoder total** = prompt encoder + attention + heads + tokens + mask
 > assembly (146.2 ms). Postprocess (12.8 ms) is measured separately.

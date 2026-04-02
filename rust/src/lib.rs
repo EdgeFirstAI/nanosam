@@ -193,9 +193,24 @@ impl Session {
         embedding: &ImageEmbedding,
         prompt: &Prompt,
     ) -> Result<(Vec<hal::LowResMask>, usize, Timings), Box<dyn std::error::Error>> {
+        self.decode_low_res_threshold(embedding, prompt, 0.0)
+    }
+
+    /// Decode with a configurable mask logit threshold.
+    ///
+    /// `threshold` shifts the mask boundary: 0.0 = standard, negative values
+    /// (e.g. -2.0) recover borderline pixels lost to INT8 quantization.
+    pub fn decode_low_res_threshold(
+        &mut self,
+        embedding: &ImageEmbedding,
+        prompt: &Prompt,
+        mask_threshold: f32,
+    ) -> Result<(Vec<hal::LowResMask>, usize, Timings), Box<dyn std::error::Error>> {
         let (iou, masks_flat, timings) = self.decoder.decode(embedding, prompt)?;
 
-        let masks = hal::extract_low_res_masks(&iou, &masks_flat, embedding.original_hw);
+        let masks = hal::extract_low_res_masks_threshold(
+            &iou, &masks_flat, embedding.original_hw, mask_threshold,
+        );
 
         let best = iou
             .iter()

@@ -193,6 +193,19 @@ pub fn extract_low_res_masks(
     masks_flat: &[f32],
     original_hw: (u32, u32),
 ) -> Vec<LowResMask> {
+    extract_low_res_masks_threshold(iou, masks_flat, original_hw, 0.0)
+}
+
+/// Extract low-res masks with a configurable logit threshold.
+///
+/// `threshold` shifts the u8 midpoint: 0.0 = standard (positive logits → opaque),
+/// negative values (e.g. -2.0) recover borderline pixels lost to INT8 quantization.
+pub fn extract_low_res_masks_threshold(
+    iou: &[f32],
+    masks_flat: &[f32],
+    original_hw: (u32, u32),
+    threshold: f32,
+) -> Vec<LowResMask> {
     let (orig_h, orig_w) = original_hw;
 
     // Compute content crop (undo letterbox padding)
@@ -208,8 +221,8 @@ pub fn extract_low_res_masks(
         let mut data_u8 = vec![0u8; lim_y * lim_x];
         for y in 0..lim_y {
             for x in 0..lim_x {
-                let val = masks_flat[(y * 256 + x) * 4 + i];
-                // Sigmoid-like mapping to u8: threshold at 0 → 128
+                let val = masks_flat[(y * 256 + x) * 4 + i] - threshold;
+                // Sigmoid-like mapping to u8: threshold → 128
                 data_u8[y * lim_x + x] = if val > 0.0 {
                     (128.0 + (val.min(5.0) / 5.0 * 127.0)) as u8
                 } else {
