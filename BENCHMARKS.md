@@ -2,12 +2,25 @@
 
 ## Summary
 
-| Platform | Config | Total Latency | Notes |
-|----------|--------|--------------|-------|
-| Jetson Orin Nano | TensorRT FP16 | 21.6 ms | GPU reference |
-| i.MX 95 | Vanilla CPU (ONNX) | 3,459 ms | No NPU — baseline |
-| i.MX 95 | Naive onnx2tf → NPU | 697 ms | Runs but garbage masks |
-| i.MX 95 | **EdgeFirst NPU** | **331 ms** | **10.5x speedup** |
+### Inference (encoder + decoder)
+
+| Platform | Config | Encoder (ms) | Decoder (ms) | Inference (ms) |
+|----------|--------|:------------:|:------------:|:--------------:|
+| Jetson Orin Nano | TensorRT FP16 | 15.3 | 6.3 | **21.6** |
+| i.MX 95 | Vanilla CPU (ONNX) | 2,953 | 402 | **3,355** |
+| i.MX 95 | Naive onnx2tf → NPU | 198 | 366 | **564** |
+| i.MX 95 | **EdgeFirst NPU** | **104** | **146** | **250** |
+
+i.MX 95 EdgeFirst vs vanilla CPU: **13.4x** inference speedup.
+i.MX 95 EdgeFirst vs naive NPU: **2.3x** faster and produces correct masks.
+
+### End-to-end pipeline (i.MX 95)
+
+| Config | Preprocess | Encoder | Decoder | Postprocess | Total |
+|--------|:----------:|:-------:|:-------:|:-----------:|:-----:|
+| Vanilla CPU | 103 ms | 2,953 ms | 402 ms | — | **3,459 ms** |
+| Naive onnx2tf → NPU | 175 ms | 198 ms | 366 ms | — | **697 ms** |
+| **EdgeFirst NPU** | **67 ms** | **104 ms** | **146 ms** | **13 ms** | **331 ms** |
 
 | Vanilla CPU (Correct) | Naive onnx2tf → NPU (Broken) | EdgeFirst NPU (Correct) |
 |:---:|:---:|:---:|
@@ -66,51 +79,59 @@ graph TD
 The encoder uses a **twin model** (Keras rebuild with tanh-approximate GELU,
 BN fusion) to eliminate the float islands that break naive onnx2tf conversion.
 
-## Jetson Orin Nano — TensorRT FP16
+## Detailed Results
 
-100 runs, 10 warmup, MAXN_SUPER.
+### Jetson Orin Nano — TensorRT FP16
 
-| Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
-|-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Encoder (TRT FP16) | 15.27 | 15.26 | 0.10 | 15.08 | 15.63 | 15.42 | 15.62 |
-| Decoder (TRT FP16) | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 | 6.48 | 6.89 |
-| **Total** | **21.56** | **21.52** | **0.26** | **21.15** | **23.53** | **21.87** | **22.08** |
+100 runs, 10 warmup, MAXN_SUPER. Encoder and decoder inference only (no
+preprocess/postprocess).
 
-## NXP i.MX 95
+| Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) |
+|-------|-----------|-------------|----------|----------|----------|
+| Encoder | 15.27 | 15.26 | 0.10 | 15.08 | 15.63 |
+| Decoder | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 |
+| **Total** | **21.56** | **21.52** | **0.26** | **21.15** | **23.53** |
 
-### Vanilla CPU (ONNX Runtime)
+### i.MX 95 — Vanilla CPU (ONNX Runtime)
 
 50 runs, 5 warmup.
 
-| Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
-|-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess | 103.47 | 103.41 | 1.79 | 101.25 | 106.91 | 105.60 | 106.45 |
-| Encoder (ONNX CPU) | 2953.25 | 2952.12 | 5.23 | 2947.20 | 2979.98 | 2962.60 | 2972.08 |
-| Decoder (ONNX CPU) | 402.07 | 402.05 | 2.70 | 396.68 | 409.30 | 406.23 | 408.04 |
-| **Total** | **3458.79** | **3458.16** | **5.73** | **3450.30** | **3484.65** | **3467.87** | **3476.66** |
+| Stage | Mean (ms) |
+|-------|-----------|
+| Preprocess | 103 |
+| Encoder | 2,953 |
+| Decoder | 402 |
+| **Total** | **3,459** |
 
-### Naive onnx2tf → Neutron
+### i.MX 95 — Naive onnx2tf → Neutron
 
 Naive conversion produces 37 float32 islands from GELU/erf. After Neutron
 SDK compilation, 8 float ops remain on CPU (96.4% conversion ratio). The
-model runs (encoder 198 ms, decoder 366 ms, total 697 ms) but produces
-garbage masks (coverage 4.8% vs ~29%).
+model runs but produces garbage masks (coverage 4.8% vs ~29%).
 
-### EdgeFirst Optimized (Neutron NPU + XNNPACK)
+| Stage | Mean (ms) |
+|-------|-----------|
+| Preprocess | 175 |
+| Encoder (Neutron, 2 partitions) | 198 |
+| Decoder (ONNX CPU) | 366 |
+| **Total** | **697** |
 
-100 runs, 10 warmup. Averages (per-run distribution not available from Rust CLI).
+### i.MX 95 — EdgeFirst Optimized (Neutron + XNNPACK)
+
+100 runs, 10 warmup.
 
 | Stage | ms |
 |-------|----|
 | Preprocess (HAL GPU) | 67.4 |
 | Encoder (Neutron INT8) | 104.4 |
-| Prompt Encoder (Rust) | 1.3 |
-| Attention (XNNPACK FP16) | 103.2 |
-| Heads A+B (Neutron INT8) | 5.8 |
-| Tokens (CPU) | 0.6 |
-| Mask Assembly (CPU) | 35.3 |
+| **Decoder total** | **146.2** |
+| &nbsp;&nbsp; Prompt Encoder (Rust) | 1.3 |
+| &nbsp;&nbsp; Attention (XNNPACK FP16) | 103.2 |
+| &nbsp;&nbsp; Heads A+B (Neutron INT8) | 5.8 |
+| &nbsp;&nbsp; Tokens (CPU) | 0.6 |
+| &nbsp;&nbsp; Mask Assembly (CPU) | 35.3 |
 | Postprocess (HAL GPU) | 12.8 |
-| **Total** | **330.7** |
+| **Pipeline Total** | **330.7** |
 
 ## Reproduction
 
