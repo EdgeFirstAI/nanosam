@@ -1,39 +1,23 @@
 # EdgeFirst NanoSAM: End-to-End Benchmarks
 
-Comprehensive performance comparison of vanilla NVIDIA NanoSAM against
-EdgeFirst-optimized NanoSAM on edge platforms.
+Comprehensive end-to-end benchmarks of EdgeFirst NanoSAM on the Jetson Orin
+Nano and NXP i.MX 95, demonstrating how EdgeFirst optimizations solve the
+NPU quantization problem and deliver a **10.5x speedup** on i.MX 95.
 
 ## Executive Summary
 
-On the NXP i.MX 95, EdgeFirst optimizations deliver a **10.5x speedup**
-(3459 ms to 331 ms) while solving the fundamental NPU quantization problem
-that prevents vanilla NanoSAM from running on integer-only accelerators.
-On Jetson Orin Nano, J1 and J2 use the same ResNet18 architecture and
-monolithic TRT decoder, so timings are essentially identical; EdgeFirst
-Jetson differentiation will come from future decomposed decoder and HAL
-preprocessing work.
+| Platform | Config | Total Latency | Notes |
+|----------|--------|--------------|-------|
+| Jetson Orin Nano | TensorRT FP16 | 21.6 ms | GPU reference (encoder + decoder) |
+| i.MX 95 | Vanilla CPU (ONNX) | 3,459 ms | No NPU — baseline |
+| i.MX 95 | Naive NPU (onnx2tf) | BROKEN | Float islands → garbage masks |
+| i.MX 95 | **EdgeFirst NPU** | **331 ms** | **10.5x vs CPU, correct masks** |
 
-| Platform | Config | Total Latency | Speedup |
-|----------|--------|--------------|---------|
-| Jetson Orin Nano | NVIDIA Baseline | 21.56 ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | 21.77 ms | 1.00x |
-| i.MX 95 | Vanilla (CPU) | 3458.79 ms | 1.0x |
-| i.MX 95 | Vanilla (NPU) | FAILS | — |
-| i.MX 95 | EdgeFirst | 330.7 ms | 10.5x |
+### Visual Comparison — i.MX 95
 
-### Visual Comparison
-
-#### Jetson Orin Nano
-
-| NVIDIA NanoSAM Baseline | EdgeFirst NanoSAM |
-|:---:|:---:|
-| ![NVIDIA Baseline](assets/benchmark/jetson_nvidia_baseline.jpg) | ![EdgeFirst](assets/benchmark/jetson_edgefirst.jpg) |
-
-#### NXP i.MX 95
-
-| Naive NPU Conversion (Broken) | EdgeFirst NanoSAM (Correct) |
-|:---:|:---:|
-| ![Naive NPU](assets/benchmark/imx95_naive_npu.jpg) | ![EdgeFirst](assets/benchmark/imx95_edgefirst.jpg) |
+| Vanilla CPU (Correct) | Naive onnx2tf → NPU (Broken) | EdgeFirst NPU (Correct) |
+|:---:|:---:|:---:|
+| ![CPU](assets/benchmark/imx95_vanilla_cpu.jpg) | ![Naive NPU](assets/benchmark/imx95_naive_npu.jpg) | ![EdgeFirst](assets/benchmark/imx95_edgefirst.jpg) |
 
 ## Methodology
 
@@ -59,7 +43,7 @@ preprocessing work.
 
 ## Pipeline Architecture
 
-### Standard SAM Pipeline (NVIDIA)
+### Standard SAM Pipeline
 
 ```mermaid
 graph LR
@@ -137,11 +121,10 @@ in Keras with tanh-approximate GELU (fully INT8-quantizable), transfer
 weights from the trained PyTorch model, and fuse BatchNorm offline.
 Result: zero float islands, cosine 0.9398 vs ONNX reference.
 
-## Jetson Orin Nano Results
+## Jetson Orin Nano — GPU Reference
 
-### NVIDIA NanoSAM Baseline (J1)
-
-100 runs, 10 warmup. Both encoder and decoder are TensorRT FP16.
+100 runs, 10 warmup. ResNet18 encoder and MobileSAM decoder, both TensorRT
+FP16, MAXN_SUPER power mode.
 
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
@@ -149,38 +132,16 @@ Result: zero float islands, cosine 0.9398 vs ONNX reference.
 | Decoder (FP16) | 6.29 | 6.25 | 0.22 | 6.07 | 8.15 | 6.48 | 6.89 |
 | **Total** | **21.56** | **21.52** | **0.26** | **21.15** | **23.53** | **21.87** | **22.08** |
 
-### EdgeFirst NanoSAM (J2)
+| ![Jetson Mask](assets/benchmark/jetson_nvidia_baseline.jpg) |
+|:---:|
+| NanoSAM segmentation on Jetson Orin Nano (21.6 ms) |
 
-100 runs, 10 warmup. Same ResNet18 architecture and same monolithic TRT FP16
-decoder as J1 — timings are essentially identical. EdgeFirst Jetson
-differentiation will come from future decomposed decoder and HAL
-preprocessing work.
+## NXP i.MX 95 — EdgeFirst Optimization
 
-| Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
-|-------|-----------|-------------|----------|----------|----------|----------|----------|
-| Preprocess + Encoder | 15.37 | 15.35 | 0.11 | 15.18 | 15.98 | 15.60 | 15.73 |
-| Decoder (FP16) | 6.40 | 6.34 | 0.27 | 6.14 | 8.55 | 6.65 | 6.88 |
-| **Total** | **21.77** | **21.65** | **0.32** | **21.37** | **23.95** | **22.15** | **22.55** |
+### Vanilla NanoSAM on CPU (baseline)
 
-### Jetson Comparison
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#76b900'}}}%%
-xychart-beta
-    title "Jetson Orin Nano: End-to-End Latency (ms)"
-    x-axis ["NVIDIA Baseline", "EdgeFirst"]
-    y-axis "Latency (ms)" 0 --> 25
-    bar [21.56, 21.77]
-```
-
-J1 and J2 are within measurement noise (<1% difference). Both use the
-same ResNet18 FP16 encoder and monolithic MobileSAM FP16 decoder.
-
-## NXP i.MX 95 Results
-
-### Vanilla NanoSAM on CPU (M1a)
-
-50 runs, 5 warmup.
+50 runs, 5 warmup. ONNX Runtime on Cortex-A55 CPU — correct but extremely
+slow.
 
 | Stage | Mean (ms) | Median (ms) | Std (ms) | Min (ms) | Max (ms) | P95 (ms) | P99 (ms) |
 |-------|-----------|-------------|----------|----------|----------|----------|----------|
@@ -189,15 +150,15 @@ same ResNet18 FP16 encoder and monolithic MobileSAM FP16 decoder.
 | Decoder (ONNX CPU) | 402.07 | 402.05 | 2.70 | 396.68 | 409.30 | 406.23 | 408.04 |
 | **Total** | **3458.79** | **3458.16** | **5.73** | **3450.30** | **3484.65** | **3467.87** | **3476.66** |
 
-### Naive NPU Conversion (M1b)
+### Naive onnx2tf → Neutron (broken)
 
-**Result: FAILS — broken segmentation masks**
+**Result: FAILS — garbage segmentation masks**
 
-The naive `onnx2tf` conversion of NVIDIA's ResNet18 encoder to TFLite INT8,
-followed by Neutron SDK compilation (`neutron-converter --target imx95`),
-produces a model with float32 islands from GELU/erf decomposition. The
-converter splits the graph into **2 NeutronGraph partitions** with **8 float
-operators** remaining on CPU (96.4% conversion ratio):
+The naive `onnx2tf` conversion followed by Neutron SDK compilation
+(`neutron-converter --target imx95`) produces a model with float32 islands
+from GELU/erf decomposition. The converter splits the graph into **2
+NeutronGraph partitions** with **8 float operators** remaining on CPU
+(96.4% conversion ratio):
 
 ```
 WARNING: Graph "main" has FLOAT operators which are NOT supported!
@@ -207,20 +168,14 @@ The model runs (encoder: 198 ms) but the float islands corrupt the
 embedding, producing **garbage segmentation masks** (IoU 0.747 vs 0.986
 for EdgeFirst, mask coverage 4.8% vs expected ~29%):
 
-| Vanilla CPU (Correct) | Naive NPU (Broken) | EdgeFirst NPU (Correct) |
+| Vanilla CPU (Correct) | Naive onnx2tf → NPU (Broken) | EdgeFirst NPU (Correct) |
 |:---:|:---:|:---:|
 | ![CPU](assets/benchmark/imx95_vanilla_cpu.jpg) | ![Naive NPU](assets/benchmark/imx95_naive_npu.jpg) | ![EdgeFirst](assets/benchmark/imx95_edgefirst.jpg) |
 
-EdgeFirst solves this with a **twin model** approach: rebuild the encoder
-in Keras with tanh-approximate GELU (fully INT8-quantizable), transfer
-weights from PyTorch, and fuse BatchNorm offline. Result: zero float
-islands, full Neutron delegation, encoder at **104.4 ms** with correct
-masks (IoU 0.986).
+### EdgeFirst NanoSAM (optimized)
 
-### EdgeFirst NanoSAM (M2)
-
-100 runs, 10 warmup. Per-run statistics are not available from the Rust
-CLI; values below are averaged across all runs.
+100 runs, 10 warmup. Twin model INT8 encoder on Neutron NPU, decomposed
+decoder with XNNPACK attention, Rust CLI pipeline.
 
 IoU: [0.912, 0.986, 0.974, 0.970] — correct output, best mask IoU 0.986.
 
@@ -247,73 +202,51 @@ xychart-beta
     bar [3459, 331]
 ```
 
-**10.5x speedup** (3459 ms to 331 ms).
+**10.5x speedup** (3459 ms → 331 ms).
 
 ## Cross-Platform Summary
 
-| Platform | Config | Encoder | Decoder | Preprocess | Total | vs Baseline |
-|----------|--------|---------|---------|------------|-------|-------------|
-| Jetson Orin Nano | NVIDIA Baseline | 15.27 ms | 6.29 ms | incl. | 21.56 ms | 1.0x |
-| Jetson Orin Nano | EdgeFirst | 15.37 ms | 6.40 ms | incl. | 21.77 ms | 1.00x |
-| i.MX 95 | Vanilla CPU | 2953.25 ms | 402.07 ms | 103.47 ms | 3458.79 ms | 1.0x |
-| i.MX 95 | EdgeFirst NPU | 104.4 ms | 146.2 ms | 67.4 ms | 330.7 ms | 10.5x |
+| Platform | Config | Encoder | Decoder | Total |
+|----------|--------|---------|---------|-------|
+| Jetson Orin Nano | TRT FP16 (GPU ref) | 15.3 ms | 6.3 ms | 21.6 ms |
+| i.MX 95 | Vanilla CPU (ONNX) | 2953 ms | 402 ms | 3459 ms |
+| i.MX 95 | Naive onnx2tf → NPU | 198 ms | — | BROKEN |
+| i.MX 95 | **EdgeFirst NPU** | **104 ms** | **146 ms** | **331 ms** |
 
 ## Reproduction
 
 ### Jetson Orin Nano
 
-#### Prerequisites
-
 ```bash
 # Set performance mode
 sudo nvpmodel -m 2   # MAXN_SUPER
 sudo jetson_clocks
-```
 
-#### NVIDIA Baseline (J1)
-
-```bash
-cd ~/models/nanosam-nvidia
-# Download models (see NVIDIA README for Google Drive links)
+# Build TRT engines
 trtexec --onnx=data/resnet18_image_encoder.onnx \
   --saveEngine=data/resnet18_image_encoder.engine --fp16
 trtexec --onnx=data/mobile_sam_mask_decoder.onnx \
-  --saveEngine=data/mobile_sam_mask_decoder.engine \
-  --minShapes=point_coords:1x1x2,point_labels:1x1 \
-  --maxShapes=point_coords:1x10x2,point_labels:1x10
+  --saveEngine=data/mobile_sam_mask_decoder.engine --fp16 \
+  --optShapes=point_coords:1x2x2,point_labels:1x2
 
-cd ~/models/nanosam
+# Run benchmark
 python3 scripts/benchmark_jetson_nvidia.py \
   --image assets/dogs.jpg \
-  --encoder ../nanosam-nvidia/data/resnet18_image_encoder.engine \
-  --decoder ../nanosam-nvidia/data/mobile_sam_mask_decoder.engine \
-  --box 100 100 850 759 --warmup 10 --runs 100
-```
-
-#### EdgeFirst (J2)
-
-```bash
-cd ~/models/nanosam
-python3 scripts/benchmark_jetson_nvidia.py \
-  --image assets/dogs.jpg \
-  --encoder data/resnet18_e200.engine \
-  --decoder ../nanosam-nvidia/data/mobile_sam_mask_decoder.engine \
+  --encoder data/resnet18_image_encoder.engine \
+  --decoder data/mobile_sam_mask_decoder.engine \
   --box 100 100 850 759 --warmup 10 --runs 100
 ```
 
 ### NXP i.MX 95
-
-#### Prerequisites
 
 ```bash
 # Set performance governor
 echo performance | sudo tee /sys/devices/system/cpu/cpufreq/policy*/scaling_governor
 ```
 
-#### Vanilla CPU (M1a)
+#### Vanilla CPU
 
 ```bash
-cd ~/models/nanosam
 python3 scripts/benchmark_imx95_vanilla.py cpu \
   --image assets/dogs.jpg \
   --encoder data/resnet18_image_encoder.onnx \
@@ -321,17 +254,23 @@ python3 scripts/benchmark_imx95_vanilla.py cpu \
   --box 100 100 850 759 --warmup 5 --runs 50
 ```
 
-#### Naive NPU Attempt (M1b)
+#### Naive NPU Attempt
 
 ```bash
+# Convert with Neutron SDK (produces broken model)
+neutron-converter \
+  --input encoder_fixed_integer_quant.tflite \
+  --output encoder_naive_neutron.tflite \
+  --target imx95
+
 python3 scripts/benchmark_imx95_vanilla.py npu \
   --image assets/dogs.jpg \
-  --encoder data/encoder_onnx2tf_int8.tflite \
+  --encoder data/encoder_naive_neutron.tflite \
   --decoder data/mobile_sam_mask_decoder.onnx \
   --box 100 100 850 759
 ```
 
-#### EdgeFirst (M2)
+#### EdgeFirst Optimized
 
 ```bash
 ./nanosam bench \
