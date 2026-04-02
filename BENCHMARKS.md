@@ -98,10 +98,24 @@ graph TD
 - **Static convolutions** (heads) — perfect for INT8 NPU offload
 - **Dynamic attention** (cross-attention with variable prompt sizes) — must stay on CPU
 
-By splitting the decoder into 5 stages, we can offload the compute-heavy
-heads to the NPU while keeping the attention on CPU with XNNPACK FP16
-acceleration. The prompt encoder is replaced entirely with a pure Rust
-implementation (146 vs 1187 ONNX nodes, 55 KB vs 16 MB).
+Full INT8 quantization of the decoder **fails catastrophically** — the
+attention block's softmax and LayerNorm operations amplify quantization
+error through three compounding stages: dot-product accumulation (~5.7x
+amplification), exponential softmax (65–170% weight shifts from small
+quantization deltas), and LayerNorm variance sensitivity. Full INT8
+achieves only 48.2% binary mask IoU vs 1.0 for FP32 (see
+[sam-decoder analysis](../sam-decoder/QUANT.md)).
+
+By splitting the decoder at the transformer boundary, we keep the
+error-sensitive attention in FP16 on CPU (XNNPACK) while offloading the
+error-tolerant heads to INT8 on the NPU — a **27x improvement** in max
+output error vs full INT8. The prompt encoder is replaced entirely with
+a pure Rust implementation (146 vs 1187 ONNX nodes, 55 KB vs 16 MB).
+
+The split architecture delivers a **2.1x decoder speedup** vs the
+monolithic ONNX Runtime FP32 decoder (351 ms → 167 ms), with heads
+going from 74 ms on CPU to 4.9 ms on NPU — a **15x speedup** for that
+stage alone.
 
 ### Why Vanilla NanoSAM Fails on NPU
 
